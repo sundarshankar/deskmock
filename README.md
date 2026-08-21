@@ -1,11 +1,12 @@
 # DeskMock
 
-**Private AI mock interviews, right from your desk.** No cloud voice service, no LiveKit, no GPU.
+**Local-first AI mock interviews, right from your desk.** On-device voice, no cloud voice service, no LiveKit, no GPU.
 
-DeskMock is a local-first CLI mock interviewer. You **speak your answers** using any desktop dictation
-tool (local speech-to-text), an **OpenAI-compatible LLM** plays a rigorous interviewer and coaches you,
-and macOS **`say`** reads the questions aloud. Your **audio never leaves your machine** — only text reaches
-the model, on *your* API key.
+DeskMock is a local-first CLI mock interviewer. You **speak your answers** using a local dictation tool
+(on-device speech-to-text), an **OpenAI-compatible LLM** (cloud or local) plays a rigorous interviewer and
+coaches you, and macOS **`say`** reads the questions aloud. Your **voice never leaves your machine** — only
+text reaches the model, on *your* API key. Point the model at a local endpoint (vLLM/Ollama) and nothing
+leaves your machine at all.
 
 ```
 🔊  Interviewer reads a question aloud
