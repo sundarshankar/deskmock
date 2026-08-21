@@ -1,0 +1,10 @@
+# secrets — NEVER commit
+*.env
+openrouter.env
+.deskmock/
+**/*.key
+# runtime
+transcripts/
+node_modules/
+.DS_Store
+__pycache__/

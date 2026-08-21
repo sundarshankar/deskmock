@@ -1,0 +1,15 @@
+Senior Software Engineer — Platform Team
+Location: Remote (US)
+
+We're hiring a Senior Software Engineer to help build the developer platform our product teams rely on.
+You'll own CI/CD, build tooling, and reliability across services running on Kubernetes.
+
+Responsibilities:
+- Design and evolve the CI/CD platform; standardize pipelines and testing across teams.
+- Improve reliability and performance of core services (SLOs, observability, incident response).
+- Partner with product engineers to reduce friction and speed delivery.
+
+Requirements:
+- 5+ years building backend services and/or developer platforms.
+- Strong with Kubernetes, CI/CD, and at least one of Go/Python/TypeScript.
+- Experience with observability, performance tuning, and on-call.
