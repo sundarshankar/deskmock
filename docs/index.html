@@ -66,9 +66,14 @@ section{padding:60px 0;border-top:1px solid var(--line)}
 section h2{font-size:clamp(24px,3.6vw,34px);margin:0 0 14px;font-weight:800}
 section .lead{color:var(--muted);font-size:17px;max-width:720px;margin:0 0 8px}
 .center{text-align:center}.center .lead{margin-left:auto;margin-right:auto}
+/* steps */
+.step{display:flex;align-items:center;gap:11px;font-weight:600;font-size:16px;margin:26px 0 0}
+.step .num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.step a{font-weight:600}
 /* code block */
 .codeblock{background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:18px 20px;overflow-x:auto;
-  font-size:13.5px;line-height:1.75;margin:18px 0;border:1px solid var(--line)}
+  font-size:13.5px;line-height:1.75;margin:12px 0 6px;border:1px solid var(--line);white-space:pre}
 .codeblock .c{color:#7d8590}.codeblock .k{color:#7dd3fc}.codeblock .s{color:#a5d6a4}
 /* feature grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:34px}
@@ -103,7 +108,7 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
   <div class="logo">🎙 Desk<span class="m">Mock</span></div>
   <div class="navlinks">
     <a href="#what">What</a>
-    <a href="#start">Quick start</a>
+    <a href="#start">Setup</a>
     <a href="#features">Features</a>
     <a href="#faq">FAQ</a>
     <a href="https://github.com/sundarshankar/deskmock" class="btn">GitHub ↗</a>
@@ -155,22 +160,29 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
 </div></section>
 
 <section id="start"><div class="wrap">
-  <p class="eyebrow">Quick start</p>
-  <h2>Running in under a minute.</h2>
-  <p class="lead">Bring an OpenAI-compatible key (OpenRouter, or a local endpoint). The bundled sample CV and job description let you try it immediately.</p>
-  <div class="codeblock"><span class="c"># any OpenAI-compatible key — OpenRouter, or a local vLLM/Ollama URL</span>
-<span class="k">export</span> OPENROUTER_API_KEY=<span class="s">sk-or-...</span>
+  <p class="eyebrow">Get started</p>
+  <h2>Set up in under a minute.</h2>
+  <p class="lead">A single Python script — <strong>no dependencies to install</strong>. You need Python 3.9+ and an OpenAI-compatible API key (or a local model). Voice is optional; you can start by typing.</p>
 
-<span class="c"># try it now with the bundled sample CV + JD</span>
-python3 deskmock.py --speak --auto
+  <p class="step"><span class="num">1</span> Get the code</p>
+  <div class="codeblock">git clone https://github.com/sundarshankar/deskmock.git
+<span class="k">cd</span> deskmock</div>
 
-<span class="c"># …or with your own CV and the real job description</span>
-python3 deskmock.py --speak --auto \
+  <p class="step"><span class="num">2</span> Add an LLM key — grab one at <a href="https://openrouter.ai" target="_blank" rel="noopener">openrouter.ai</a> (create a key, add a few dollars of credit; a session costs pennies)</p>
+  <div class="codeblock"><span class="k">export</span> OPENROUTER_API_KEY=<span class="s">sk-or-your-key-here</span>
+<span class="c"># prefer a local model? skip the key and pass --base-url http://localhost:11434/v1</span></div>
+
+  <p class="step"><span class="num">3</span> Run it — type your answers, using the bundled sample CV + JD</p>
+  <div class="codeblock">python3 deskmock.py --clipboard
+<span class="c"># …or with your own CV and the real job description:</span>
+python3 deskmock.py --clipboard \
   --cv <span class="s">my-cv.md</span> --jd <span class="s">role.txt</span> \
   --role <span class="s">"Senior SWE"</span> --company <span class="s">"Acme"</span></div>
-  <p class="lead" style="font-size:15px">In-session: <code>/done</code> for your scorecard · <code>/repeat</code> to hear the question again · <code>/skip</code>. Prefer to type? Drop <code>--auto</code> and just type each answer.</p>
+
+  <p class="lead" style="font-size:15px">You'll get a question — type an answer, press Enter for feedback, and <code>/done</code> for your scorecard (<code>/repeat</code>, <code>/skip</code> too). Want it read aloud and hands-free? Add <code>--speak</code> and set up dictation — see the docs.</p>
   <div class="cta" style="justify-content:flex-start;margin-top:22px">
-    <a href="https://github.com/sundarshankar/deskmock#readme" class="btn p">Read the docs</a>
+    <a href="https://github.com/sundarshankar/deskmock#setup" class="btn p">Full setup &amp; voice guide</a>
+    <a href="https://github.com/sundarshankar/deskmock#troubleshooting" class="btn">Troubleshooting</a>
     <a href="https://github.com/sundarshankar/deskmock" class="btn">Star on GitHub</a>
   </div>
 </div></section>
