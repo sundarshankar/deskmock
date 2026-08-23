@@ -1,0 +1,22 @@
+# JobHelm configuration — copy the values you need into your shell (export …)
+# or into an `openrouter.env` file next to mission-control.py. Nothing here is
+# required to view the sample board; the LLM features need a key.
+
+# --- LLM (drafts, briefs, question sets, in-app rehearse) ---
+# Any OpenAI-compatible key. OpenRouter is the easy default: https://openrouter.ai
+OPENROUTER_API_KEY=sk-or-your-key-here
+
+# --- point at your own job search (defaults to the bundled sample-data) ---
+# JOBHELM_CAREEROPS=/path/to/your/career-ops
+# JOBHELM_MOCK=/path/to/your/deskmock
+
+# --- your identity (used only when drafting reply messages) ---
+# JOBHELM_NAME="Your Name"
+# JOBHELM_MOBILE="555-0100"
+# JOBHELM_EMAIL="you@example.com"
+# JOBHELM_PROFILE="a platform engineering leader targeting Sr Director/VP roles (remote)"
+
+# --- Discover filter + server ---
+# JOBHELM_LOCATIONS="remote|anywhere|united states|\bus\b"
+# JOBHELM_PORT=8899
+# JOBHELM_HOST=127.0.0.1

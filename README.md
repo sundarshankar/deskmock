@@ -2,6 +2,8 @@
 
 **Local-first AI mock interviews, right from your desk.** On-device voice, no cloud voice service, no LiveKit, no GPU.
 
+> **This repo is a small local-first job-search toolkit:** **DeskMock** (the mock interviewer, below) and **[JobHelm](jobhelm/)** — a command center that tracks your whole pipeline, prep readiness, and next actions, with an in-app rehearse. Want the dashboard? Jump to **[jobhelm/](jobhelm/)** — clone and `python3 jobhelm/mission-control.py` for a live demo board.
+
 DeskMock is a local-first CLI mock interviewer. You **speak your answers** using a local dictation tool
 (on-device speech-to-text), an **OpenAI-compatible LLM** (cloud or local) plays a rigorous interviewer and
 coaches you, and macOS **`say`** reads the questions aloud. Your **voice never leaves your machine** — only
@@ -115,6 +117,18 @@ Two ways to do the speech-to-text half:
 
 `clean-markers.mjs` (bundled) audits/strips renderer metadata and hidden Unicode from any files you
 generate (e.g. a résumé PDF): `node clean-markers.mjs audit résumé.pdf`.
+
+## JobHelm — the job-search command center
+
+Also in this repo: **[JobHelm](jobhelm/)**, a local-first dashboard that ties the whole search together — a Kanban pipeline board, honest prep-readiness tracking, an **in-app rehearse** (mock interview in the browser, no Terminal needed), recruiter-reply drafting, company briefs, and next-best-actions. It's the command center; DeskMock is the rehearsal engine it drives.
+
+Try it in seconds (ships with sample data, no key or setup needed just to look):
+
+```bash
+python3 jobhelm/mission-control.py     # opens http://localhost:8899 with a demo board
+```
+
+Full setup, configuration, and how to point it at your own [career-ops](https://github.com/santifer/career-ops) data are in **[jobhelm/README.md](jobhelm/README.md)**.
 
 ## Requirements
 

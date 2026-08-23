@@ -1,0 +1,33 @@
+# JobHelm — run anywhere:
+#   export OPENROUTER_API_KEY=sk-or-...
+#   docker compose up --build         # then open http://localhost:8899
+#
+# Out of the box this serves the bundled sample data, so you get a populated
+# demo board immediately. To use your OWN job search, uncomment the volumes to
+# mount your career-ops / DeskMock checkouts and point JOBHELM_* at them.
+#
+# Note: host-only actions (DeskMock Terminal voice, macOS `open`, and the
+# career-ops `node scan.mjs` / `set-status.mjs` shell-outs) run on the host,
+# not inside the container. The in-app rehearse, drafts, briefs, and the board
+# all work in the container.
+services:
+  jobhelm:
+    build: .
+    container_name: jobhelm
+    ports:
+      - "8899:8899"
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # --- your identity (used when drafting replies); optional ---
+      JOBHELM_NAME: ${JOBHELM_NAME:-}
+      JOBHELM_MOBILE: ${JOBHELM_MOBILE:-}
+      JOBHELM_EMAIL: ${JOBHELM_EMAIL:-}
+      JOBHELM_PROFILE: ${JOBHELM_PROFILE:-a candidate}
+    # --- point at your real data instead of the samples (optional) ---
+    # volumes:
+    #   - /path/to/your/career-ops:/data/career-ops
+    #   - /path/to/your/mock-interview:/data/mock-interview
+    # environment:
+    #   JOBHELM_CAREEROPS: /data/career-ops
+    #   JOBHELM_MOCK: /data/mock-interview
+    restart: unless-stopped

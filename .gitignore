@@ -3,8 +3,8 @@
 openrouter.env
 .deskmock/
 **/*.key
-# runtime
-transcripts/
+# runtime (DeskMock CLI writes here at repo root; keep JobHelm's sample-data transcripts)
+/transcripts/
 node_modules/
 .DS_Store
 __pycache__/

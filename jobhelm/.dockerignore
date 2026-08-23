@@ -1,0 +1,10 @@
+references/
+.git/
+node_modules/
+output/
+reports/
+data/
+transcripts/
+*.html
+*.pdf
+*.env

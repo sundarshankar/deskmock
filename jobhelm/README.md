@@ -1,0 +1,125 @@
+# JobHelm
+
+**A local-first job-search command center.** One screen to see your whole pipeline, track prep readiness, rehearse interviews, draft recruiter replies, and decide the next best action — running on your machine, on your API key. No cloud account, no telemetry, your data never leaves your device.
+
+JobHelm is a companion dashboard for [career-ops](https://github.com/santifer/career-ops) (the local job-search pipeline) and [DeskMock](https://github.com/sundarshankar/deskmock) (local mock interviews). It reads your career-ops data, drives its scripts, and adds an interactive cockpit on top.
+
+```
+Kanban board  →  drill into a role  →  prep readiness + gaps
+   ↑ scan / apply / draft replies        ↓ rehearse (in-app or DeskMock) → scorecard
+```
+
+## What it does
+
+- **Pipeline board** — Kanban of every application by stage (To apply → Applied → In touch → Interview → Offer), with search + filters
+- **Prep readiness** — honest per-role readiness based on *actual practice* (a mock rep with a scorecard), with prep materials tracked separately
+- **In-app rehearse** — a full mock interview in the browser: questions read aloud (browser TTS), you type or dictate, feedback + scorecard, saved as a transcript. No Terminal, no extra tooling.
+- **Discover** — turns the scan firehose into a ranked shortlist of relevant, recent, in-location roles
+- **Draft replies** — draft recruiter/HM responses in your voice with your contact details; flags spam; never auto-sends
+- **Company briefs & question sets** — generated from the role + your CV, for prep
+- **Next best actions** — follow-ups due, prep gaps, warm-path reminders, at a glance
+
+Everything that calls an LLM (drafts, briefs, question sets, in-app rehearse) uses **any OpenAI-compatible endpoint** on your own key.
+
+## Setup
+
+JobHelm is a single Python script — **no dependencies to install** (standard library only).
+
+**1. Get the code**
+
+```bash
+git clone https://github.com/sundarshankar/jobhelm.git
+cd jobhelm
+```
+
+**2. Check Python** (3.9 or newer)
+
+```bash
+python3 --version
+```
+
+**3. Run it — with the bundled sample data**
+
+```bash
+python3 mission-control.py
+```
+
+It opens `http://localhost:8899` to a populated **demo board** so you can click around immediately — no key or data required just to look.
+
+**4. Add an LLM key** (for drafts, briefs, question sets, and in-app rehearse). The easy default is [OpenRouter](https://openrouter.ai) — create a key, add a few dollars of credit:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-your-key-here
+python3 mission-control.py
+```
+
+(Prefer a local model? It works with any OpenAI-compatible endpoint — the model/base-url are set on the LLM side.)
+
+**5. Point it at your own job search.** JobHelm reads a [career-ops](https://github.com/santifer/career-ops) checkout (your `applications.md`, `pipeline.md`, `cv.md`, etc.) and, optionally, a [DeskMock](https://github.com/sundarshankar/deskmock) checkout for the Terminal rehearse:
+
+```bash
+export JOBHELM_CAREEROPS=/path/to/your/career-ops
+export JOBHELM_MOCK=/path/to/your/deskmock      # optional (Terminal voice rehearse)
+export JOBHELM_NAME="Your Name"                  # used in reply drafts
+export JOBHELM_MOBILE="555-0100"                 # optional
+export JOBHELM_EMAIL="you@example.com"           # optional
+export JOBHELM_PROFILE="a platform engineering leader targeting Sr Director/VP roles (remote)"
+python3 mission-control.py
+```
+
+See [`config.example`](config.example) for all variables.
+
+### Docker
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+docker compose up --build          # then open http://localhost:8899
+```
+
+Runs the sample board by default. Mount your own career-ops / DeskMock and set `JOBHELM_*` in `docker-compose.yml` to use real data. **Host-only actions** (DeskMock Terminal voice, macOS `open`, and the career-ops `node scan.mjs` / `set-status.mjs` shell-outs) run on the host, not in the container; the board, in-app rehearse, drafts, and briefs all work inside it.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `JOBHELM_CAREEROPS` | bundled `sample-data` | path to your career-ops checkout (your data) |
+| `JOBHELM_MOCK` | `sample-data/mock` | path to your DeskMock checkout (Terminal rehearse) |
+| `JOBHELM_NAME` / `JOBHELM_MOBILE` / `JOBHELM_EMAIL` | empty | your identity, used in reply drafts (or set them in `career-ops/config/profile.yml`) |
+| `JOBHELM_PROFILE` | `a candidate` | one line describing the roles you target — steers reply drafts |
+| `JOBHELM_LOCATIONS` | `remote\|anywhere\|united states\|us` | regex of location keywords to keep in Discover |
+| `JOBHELM_PORT` / `JOBHELM_HOST` | `8899` / `127.0.0.1` | where the server binds |
+| `OPENROUTER_API_KEY` | — | your LLM key (or drop an `openrouter.env` next to the script) |
+
+## How it relates to career-ops and DeskMock
+
+- **[career-ops](https://github.com/santifer/career-ops)** is the engine: it scans boards, scores roles against your CV, and stores your pipeline as plain files. JobHelm reads those files and calls its scripts — it is a **view + control layer**, not a replacement.
+- **[DeskMock](https://github.com/sundarshankar/deskmock)** is the local voice mock interviewer. JobHelm's "Voice (Terminal)" rehearse launches it; the "Rehearse here" button is an in-app text/voice version that saves a compatible transcript.
+
+Run JobHelm on its own for the demo, or with career-ops (+ DeskMock) for your real search.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Board is empty | You pointed `JOBHELM_CAREEROPS` at a folder with no `data/applications.md`. Unset it to see the sample board, or point at a real career-ops checkout. |
+| Drafts / briefs / rehearse say "No key" | `export OPENROUTER_API_KEY=sk-or-...` in the same shell, or drop an `openrouter.env` file next to the script. |
+| Scan / "Mark applied" fail | Those shell out to career-ops (`node scan.mjs`, `set-status.mjs`). They need a real career-ops checkout with Node installed — they don't run against the sample data or inside the container. |
+| Rehearse "Voice (Terminal)" does nothing | That launches DeskMock; set `JOBHELM_MOCK` to your DeskMock checkout. Or use **Rehearse here** (in-app), which needs no extra setup. |
+| Port already in use | `JOBHELM_PORT=8900 python3 mission-control.py` |
+
+## Tests
+
+```bash
+python3 test_mission_control.py      # runs against the bundled sample data, no network
+```
+
+## Credits
+
+Built on and alongside two excellent local-first projects:
+[career-ops](https://github.com/santifer/career-ops) (job-search automation) and
+[DeskMock](https://github.com/sundarshankar/deskmock) (local mock interviews).
+JobHelm doesn't fork or bundle their code — it's an independent dashboard that pairs with them.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
