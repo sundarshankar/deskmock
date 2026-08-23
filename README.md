@@ -22,16 +22,54 @@ often a GPU). That excludes anyone who is **privacy-conscious, offline-ish, or o
 DeskMock takes the opposite stance: **keep the voice local, keep the brain swappable, keep it a single
 command.** It works with any OpenAI-compatible endpoint (OpenRouter, a local vLLM/Ollama, etc.).
 
-## Quick start
+## Setup
+
+DeskMock is a single Python script with **no dependencies to install** (Python standard library only).
+
+**1. Get the code**
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-...          # or any OpenAI-compatible key
-python3 deskmock.py --speak --auto           # uses the bundled sample CV + JD
-# or with your own:
+git clone https://github.com/sundarshankar/deskmock.git
+cd deskmock
+```
+
+**2. Check Python** (3.9 or newer)
+
+```bash
+python3 --version
+```
+
+**3. Get an LLM key.** DeskMock talks to any OpenAI-compatible API. The easy default is [OpenRouter](https://openrouter.ai):
+
+- Sign up, open **Keys**, and create a key (it starts with `sk-or-`).
+- Add a few dollars of credit — a full session on `deepseek-v3.2` costs pennies.
+- Export it in the shell you'll run DeskMock from:
+
+  ```bash
+  export OPENROUTER_API_KEY=sk-or-your-key-here
+  ```
+
+  (Prefer a local model and no key at all? Point DeskMock at it with `--base-url`, e.g. Ollama: `--base-url http://localhost:11434/v1`.)
+
+**4. First run — type your answers, no voice setup needed.** Uses the bundled sample CV + JD so you can try it immediately:
+
+```bash
+python3 deskmock.py --clipboard
+```
+
+You'll see a question; **type** an answer and press Enter to get feedback and the next question. Type `/done` for your scorecard. That's the whole loop. Add voice later (below).
+
+## Running it
+
+```bash
+# your own CV + the real job description
+python3 deskmock.py --clipboard --cv my-cv.md --jd role.txt --role "Senior SWE" --company "Acme"
+
+# add read-aloud + hands-free voice once your dictation tool is set up (see Voice setup)
 python3 deskmock.py --speak --auto --cv my-cv.md --jd role.txt --role "Senior SWE" --company "Acme"
 ```
 
-Type your answers, or go voice with `--auto` (see below). Commands in-session: `/done` `/skip` `/repeat`.
+In-session commands: `/done` (scorecard) · `/repeat` (hear the question again) · `/skip`.
 
 ### Options
 
@@ -42,20 +80,36 @@ Type your answers, or go voice with `--auto` (see below). Commands in-session: `
 | `--model <slug>` | LLM model (default `deepseek/deepseek-v3.2` — cheap + reliable JSON) |
 | `--base-url <url>` | any OpenAI-compatible endpoint (default OpenRouter) |
 | `--speak` | read questions aloud via macOS `say` |
-| `--auto` | hands-free — watch the clipboard and auto-capture your dictation |
-| `--clipboard` | read each answer from the clipboard on Enter |
+| `--clipboard` | read each answer from the clipboard when you press Enter (recommended) |
+| `--auto` | fully hands-free — watch the clipboard and auto-capture your dictation |
 
-## Voice setup (macOS)
+## Voice setup (macOS, optional)
 
-The voice half is just two local pieces plus your dictation tool:
+**Voice is optional — typing works everywhere.** To go hands-free you need two things:
 
-1. **A desktop dictation tool** that can **copy transcribed text to the clipboard** — e.g.
-   [FluidVoice](https://github.com/extrudedawe-dev/fluidvoice) (local, on-device) or macOS Dictation.
-   Set its output mode to **copy-to-clipboard** and pick a hotkey.
-2. **macOS `say`** (built in) reads questions aloud via `--speak`.
+- **Read-aloud** is built in: add `--speak` and macOS `say` reads each question. Test it first: `say "hello"`.
+- **Speaking your answers** needs a dictation tool that turns your speech into text. DeskMock then picks up that text.
 
-Then run `python3 deskmock.py --speak --auto`, press your dictation hotkey, speak your answer, and DeskMock
-auto-captures it from the clipboard. Say **“done”** to finish and get a scorecard.
+Two ways to do the speech-to-text half:
+
+- **macOS Dictation (simplest):** System Settings → Keyboard → **Dictation → On**. It types straight into the Terminal, so you don't even need clipboard mode — run `python3 deskmock.py --speak`, start dictation, speak, then press Enter.
+- **[FluidVoice](https://github.com/extrudedawe-dev/fluidvoice) or similar:** set its output mode to **copy-to-clipboard** and pick a hotkey. Then run `python3 deskmock.py --speak --clipboard`, press the hotkey, speak, and press Enter to submit what it copied.
+
+> **Three things that trip people up (all easy):**
+> 1. **The dictation app must be running** before you start. If you see `clipboard empty`, the app isn't running or isn't in copy-to-clipboard mode — or just type your answer instead.
+> 2. **Some dictation tools hold the keyboard while active.** If pressing Enter does nothing, toggle dictation **off**, click into the Terminal, then press Enter.
+> 3. **`--clipboard` is friendlier than `--auto`.** It waits for your Enter so you control the timing; `--auto` is fully hands-free but can fire on stale clipboard text. Start with `--clipboard`.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| `clipboard empty — dictate…` on every Enter | Your dictation app isn't running, or isn't in **copy-to-clipboard** mode. Launch it and enable clipboard output — or just **type** your answer and press Enter. |
+| Questions aren't read aloud | Make sure you passed `--speak`, your volume is up, and `say "test"` works in a terminal on its own. |
+| Pressing Enter doesn't submit | A dictation tool is holding the keyboard. Toggle dictation **off**, click into the Terminal window, then press Enter. |
+| `OpenRouter key file not found` or auth errors | `export OPENROUTER_API_KEY=sk-or-...` in the **same** shell you run from, and confirm the key has credit. |
+| The echoed answer looks cut off | The `← read N chars` line reports the **full** captured length; the text shown after it is just a preview — your whole answer was captured. |
+| `python3: command not found` | Install Python 3.9+ (`brew install python` on macOS) and re-run `python3 --version`. |
 
 ## Keep your output clean
 
