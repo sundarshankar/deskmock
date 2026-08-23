@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DeskMock — local-first AI mock interviews</title>
+<meta name="description" content="Local-first, open-source AI mock interviewer. It reads questions aloud, you speak your answers, and it coaches you with feedback and a scorecard. Your voice never leaves your machine.">
+<meta property="og:title" content="DeskMock — local-first AI mock interviews">
+<meta property="og:description" content="Rehearse the interview out loud, on your machine. Open source. Your voice never leaves your device.">
+<meta property="og:type" content="website">
+<style>
+:root{
+  --bg:#ffffff;--panel:#f6f7f9;--ink:#14161a;--muted:#5b6472;--line:#e5e8ee;
+  --accent:#0b6b53;--accent2:#0e8a6c;--code-bg:#0f1720;--code-ink:#e6edf3;
+  --term-green:#4ade80;--term-blue:#7dd3fc;--term-amber:#fbbf24;--term-dim:#8b98a5;
+  --radius:14px;--maxw:1060px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0d0f13;--panel:#151922;--ink:#e8eaee;--muted:#9aa4b2;--line:#232833;
+  --accent:#34d399;--accent2:#5eead4;--code-bg:#0a0e14;--code-ink:#e6edf3;
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+code,kbd,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+h1,h2,h3{line-height:1.2;letter-spacing:-.01em}
+/* nav */
+nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:18px;height:60px}
+.logo{font-weight:800;font-size:18px;display:flex;align-items:center;gap:8px}
+.logo .m{color:var(--accent)}
+.navlinks{margin-left:auto;display:flex;gap:20px;align-items:center;font-size:14px}
+.navlinks a{color:var(--muted)}.navlinks a:hover{color:var(--ink);text-decoration:none}
+.btn{display:inline-block;border-radius:10px;padding:10px 18px;font-weight:600;font-size:15px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn:hover{text-decoration:none;border-color:var(--accent)}
+.btn.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.p:hover{filter:brightness(1.06)}
+/* hero */
+.hero{padding:76px 0 48px;text-align:center}
+.badge{display:inline-block;font-size:12.5px;font-weight:600;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+  border-radius:999px;padding:5px 13px;margin-bottom:22px}
+.hero h1{font-size:clamp(32px,5.4vw,52px);margin:0 0 16px;font-weight:800}
+.hero h1 .g{color:var(--accent)}
+.hero p.sub{font-size:clamp(17px,2.4vw,20px);color:var(--muted);max-width:640px;margin:0 auto 28px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.hero .note{font-size:13px;color:var(--muted)}
+/* terminal */
+.term{max-width:760px;margin:44px auto 0;text-align:left;border-radius:var(--radius);overflow:hidden;
+  border:1px solid var(--line);box-shadow:0 24px 60px -30px rgba(0,0,0,.45)}
+.term .bar{background:#1b222c;display:flex;align-items:center;gap:7px;padding:11px 14px}
+.term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.term .bar .r{background:#ff5f56}.term .bar .y{background:#ffbd2e}.term .bar .g{background:#27c93f}
+.term .bar span{margin-left:10px;color:#8b98a5;font-size:12.5px;font-family:ui-monospace,monospace}
+.term pre{margin:0;background:var(--code-bg);color:var(--code-ink);padding:20px 20px 24px;
+  font-size:13.5px;line-height:1.7;overflow-x:auto}
+.term .p{color:var(--term-green)}.term .q{color:var(--term-blue)}.term .a{color:#e6edf3}
+.term .fb{color:var(--term-amber)}.term .d{color:var(--term-dim)}
+/* sections */
+section{padding:60px 0;border-top:1px solid var(--line)}
+.eyebrow{color:var(--accent);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
+section h2{font-size:clamp(24px,3.6vw,34px);margin:0 0 14px;font-weight:800}
+section .lead{color:var(--muted);font-size:17px;max-width:720px;margin:0 0 8px}
+.center{text-align:center}.center .lead{margin-left:auto;margin-right:auto}
+/* code block */
+.codeblock{background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:18px 20px;overflow-x:auto;
+  font-size:13.5px;line-height:1.75;margin:18px 0;border:1px solid var(--line)}
+.codeblock .c{color:#7d8590}.codeblock .k{color:#7dd3fc}.codeblock .s{color:#a5d6a4}
+/* feature grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:34px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.card .ic{font-size:24px;margin-bottom:10px}
+.card h3{font-size:17px;margin:0 0 7px}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+/* callout */
+.callout{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--panel)),var(--panel));
+  border:1px solid color-mix(in srgb,var(--accent) 26%,var(--line));border-radius:var(--radius);padding:28px 26px;margin-top:30px}
+.callout h3{margin:0 0 8px;font-size:19px}.callout p{margin:0;color:var(--muted)}
+/* pills */
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.pill{font-size:13px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
+/* faq */
+details{border:1px solid var(--line);border-radius:12px;padding:2px 18px;margin-bottom:12px;background:var(--panel)}
+details summary{cursor:pointer;font-weight:600;padding:15px 0;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details summary::-webkit-details-marker{display:none}
+details summary::after{content:"+";color:var(--accent);font-size:20px;font-weight:400}
+details[open] summary::after{content:"−"}
+details p{margin:0 0 16px;color:var(--muted);font-size:15px}
+/* footer */
+footer{border-top:1px solid var(--line);padding:40px 0;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+footer a{color:var(--muted)}footer a:hover{color:var(--ink)}
+footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">🎙 Desk<span class="m">Mock</span></div>
+  <div class="navlinks">
+    <a href="#what">What</a>
+    <a href="#start">Quick start</a>
+    <a href="#features">Features</a>
+    <a href="#faq">FAQ</a>
+    <a href="https://github.com/sundarshankar/deskmock" class="btn">GitHub ↗</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="badge">Open source · MIT · local-first</span>
+  <h1>Rehearse the interview.<br><span class="g">Out loud. On your machine.</span></h1>
+  <p class="sub">DeskMock is a local-first AI mock interviewer. It reads questions aloud, you speak your answers, and it coaches you with feedback and a scorecard — grounded in your real CV. Your voice never leaves your device.</p>
+  <div class="cta">
+    <a href="#start" class="btn p">Get started</a>
+    <a href="https://github.com/sundarshankar/deskmock" class="btn">View source</a>
+  </div>
+  <div class="note">No cloud voice service · no LiveKit · no GPU · your API key</div>
+
+  <div class="term">
+    <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>deskmock — mock interview</span></div>
+<pre><span class="d">$ python3 deskmock.py --speak --auto --role "Platform Director" --company "Acme"</span>
+
+<span class="q">🔊 Interviewer ▸</span> Walk me through the most recent platform you
+   standardized for a large org. What were your criteria and the outcome?
+<span class="d">   (dictate your answer — DeskMock reads it from the clipboard on Enter)</span>
+
+<span class="p">🎙 You ▸</span> <span class="a">We consolidated three Kubernetes estates into one paved-road
+   platform; measured on DORA metrics and a 30% infra cost cut…</span>
+
+<span class="fb">🤖 Feedback ▸</span> Strong outcome + metrics. Tighten with STAR:
+   name the trigger and your specific decision. Power phrase:
+   "single paved road, measured by change-fail rate."
+<span class="q">QUESTION ▸</span> How did you drive adoption across resistant teams?
+
+<span class="d">   /done → scorecard  ·  /repeat → hear it again  ·  /skip</span></pre>
+  </div>
+</div></header>
+
+<section id="what"><div class="wrap">
+  <p class="eyebrow">What is DeskMock?</p>
+  <h2>A private interview coach that runs from your desk.</h2>
+  <p class="lead">Most AI mock-interview tools are cloud SaaS or need a real-time voice stack (LiveKit + cloud speech, often a GPU). That shuts out anyone who is privacy-conscious, offline-ish, or on modest hardware. DeskMock takes the opposite stance: <strong>keep the voice local, keep the brain swappable, keep it a single command.</strong></p>
+  <p class="lead">On-device dictation captures your spoken answer and only <em>text</em> reaches the model — on your own key. Point the model at a local endpoint (vLLM / Ollama) and nothing leaves your machine at all.</p>
+  <div class="pills">
+    <span class="pill">macOS <code>say</code> reads questions aloud</span>
+    <span class="pill">Local dictation → clipboard</span>
+    <span class="pill">Any OpenAI-compatible LLM</span>
+    <span class="pill">Transcripts saved locally</span>
+    <span class="pill">Single command</span>
+  </div>
+</div></section>
+
+<section id="start"><div class="wrap">
+  <p class="eyebrow">Quick start</p>
+  <h2>Running in under a minute.</h2>
+  <p class="lead">Bring an OpenAI-compatible key (OpenRouter, or a local endpoint). The bundled sample CV and job description let you try it immediately.</p>
+  <div class="codeblock"><span class="c"># any OpenAI-compatible key — OpenRouter, or a local vLLM/Ollama URL</span>
+<span class="k">export</span> OPENROUTER_API_KEY=<span class="s">sk-or-...</span>
+
+<span class="c"># try it now with the bundled sample CV + JD</span>
+python3 deskmock.py --speak --auto
+
+<span class="c"># …or with your own CV and the real job description</span>
+python3 deskmock.py --speak --auto \
+  --cv <span class="s">my-cv.md</span> --jd <span class="s">role.txt</span> \
+  --role <span class="s">"Senior SWE"</span> --company <span class="s">"Acme"</span></div>
+  <p class="lead" style="font-size:15px">In-session: <code>/done</code> for your scorecard · <code>/repeat</code> to hear the question again · <code>/skip</code>. Prefer to type? Drop <code>--auto</code> and just type each answer.</p>
+  <div class="cta" style="justify-content:flex-start;margin-top:22px">
+    <a href="https://github.com/sundarshankar/deskmock#readme" class="btn p">Read the docs</a>
+    <a href="https://github.com/sundarshankar/deskmock" class="btn">Star on GitHub</a>
+  </div>
+</div></section>
+
+<section id="features"><div class="wrap center">
+  <p class="eyebrow">Why DeskMock</p>
+  <h2>Practice that stays yours.</h2>
+  <p class="lead">Everything that makes it useful, without giving up your privacy or your hardware.</p>
+  <div class="grid" style="text-align:left">
+    <div class="card"><div class="ic">🔒</div><h3>Your voice stays local</h3><p>On-device dictation transcribes your answer; only the text reaches the model. Point at a local LLM and nothing leaves your machine.</p></div>
+    <div class="card"><div class="ic">🧠</div><h3>Swappable brain</h3><p>Any OpenAI-compatible endpoint — OpenRouter, vLLM, Ollama. Your key, your model choice, your cost.</p></div>
+    <div class="card"><div class="ic">🎯</div><h3>Grounded in your real CV</h3><p>Questions and coaching are built from your actual CV and the job description — never invented experience.</p></div>
+    <div class="card"><div class="ic">📊</div><h3>Real feedback + scorecard</h3><p>Per-answer feedback and power phrases, then a scorecard: clarity, structure, specificity, technical depth, executive presence.</p></div>
+    <div class="card"><div class="ic">🗂</div><h3>Transcripts you keep</h3><p>Every session is saved locally as markdown so you can review answers and track how you improve.</p></div>
+    <div class="card"><div class="ic">⚡</div><h3>No heavy stack</h3><p>No LiveKit, no cloud voice service, no GPU. A single command on modest hardware.</p></div>
+  </div>
+
+  <div class="callout" style="text-align:left">
+    <h3>Part of a local-first job-search toolkit</h3>
+    <p>DeskMock is the mock-interview engine. It pairs with a local command center that tracks your pipeline and drives prep — same philosophy: your data, your machine, open source.</p>
+  </div>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <p class="eyebrow">FAQ</p>
+  <h2>Questions, answered.</h2>
+  <div style="margin-top:26px">
+    <details open><summary>Does my voice get sent to the cloud?</summary><p>No. Dictation happens on your device; only the transcribed <em>text</em> is sent to the LLM, on your own API key. If you point the model at a local endpoint (vLLM / Ollama), nothing leaves your machine at all.</p></details>
+    <details><summary>Do I need a GPU or a real-time voice stack?</summary><p>No — no LiveKit, no cloud STT/TTS, no GPU. DeskMock uses your OS dictation for input and macOS <code>say</code> to read questions aloud. It runs on modest hardware as a single command.</p></details>
+    <details><summary>Which LLMs work?</summary><p>Any OpenAI-compatible endpoint. The default is OpenRouter with <code>deepseek/deepseek-v3.2</code> (cheap and reliable), but you can pass <code>--model</code> and <code>--base-url</code> to use anything, including a local model.</p></details>
+    <details><summary>What operating system do I need?</summary><p>The read-aloud half uses macOS <code>say</code> plus a dictation tool, so voice is best on macOS today. The interview loop itself is cross-platform — on any OS you can type your answers and get the same coaching and scorecard.</p></details>
+    <details><summary>Is it really free?</summary><p>Yes — DeskMock is open source under the MIT license. You only pay for your own LLM usage (or nothing, if you run a local model).</p></details>
+    <details><summary>How is this different from cloud mock-interview apps?</summary><p>They're SaaS: your data and voice go to their servers, often behind a subscription and a heavy voice stack. DeskMock is local-first, private, swappable, and a single command — built for people who'd rather keep it on their own machine.</p></details>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="logo">🎙 Desk<span class="m">Mock</span></div>
+  <div class="flinks">
+    <a href="https://github.com/sundarshankar/deskmock">GitHub</a>
+    <a href="https://github.com/sundarshankar/deskmock#readme">Docs</a>
+    <a href="https://github.com/sundarshankar/deskmock/blob/main/CONTRIBUTING.md">Contribute</a>
+    <a href="https://github.com/sundarshankar/deskmock/blob/main/LICENSE">MIT License</a>
+  </div>
+  <div>© 2026 DeskMock · local-first · open source</div>
+</div></footer>
+
+</body>
+</html>
