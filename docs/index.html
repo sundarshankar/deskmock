@@ -101,6 +101,14 @@ section .lead{color:var(--muted);font-size:17px;max-width:720px;margin:0 0 8px}
 .jhchips{display:flex;gap:3px}
 .jhdot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block}
 .jhdot.on{background:var(--accent)}
+/* framed screenshots + flow */
+.flow{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:28px}
+@media(max-width:760px){.flow{grid-template-columns:1fr}}
+figure.shot{margin:0}
+figure.shot .num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:13px;margin-right:8px;vertical-align:middle}
+figure.shot .cap{font-weight:600;font-size:15px;margin:0 0 10px}
+figure.shot img{width:100%;height:auto;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 40px -22px rgba(0,0,0,.5);display:block;background:#0d0f13}
+figure.shot figcaption{color:var(--muted);font-size:13px;margin-top:9px}
 /* pills */
 .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .pill{font-size:13px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
@@ -224,32 +232,20 @@ python3 deskmock.py --clipboard \
   <h2>JobHelm — your whole search on one board.</h2>
   <p class="lead">DeskMock rehearses you; <strong>JobHelm</strong> runs the search. In the <strong>same repo</strong>, it's a local dashboard for your entire pipeline — track every role, see honest prep-readiness, rehearse in-app, draft recruiter replies, and know the next best move. Same philosophy: your data, your machine, your key.</p>
 
-  <div class="jhboard" role="img" aria-label="JobHelm Kanban board showing roles across stages">
-    <div class="jhcol"><h4>To apply <span>1</span></h4>
-      <div class="jhc"><span class="sc">3.8</span><div class="co">Orbital Data</div><div class="ro">Director, FinOps</div>
-        <div class="jhbar"><i style="width:0%"></i></div>
-        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
-    </div>
-    <div class="jhcol"><h4>Applied <span>2</span></h4>
-      <div class="jhc"><span class="sc">4.5</span><div class="co">Vertex Cloud</div><div class="ro">Director, Developer Platform</div>
-        <div class="jhbar"><i style="width:0%"></i></div>
-        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
-      <div class="jhc"><span class="sc">4.2</span><div class="co">Helios Systems</div><div class="ro">VP, Reliability Engineering</div>
-        <div class="jhbar"><i style="width:0%"></i></div>
-        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
-    </div>
-    <div class="jhcol"><h4>In touch <span>1</span></h4>
-      <div class="jhc"><span class="sc">4.4</span><div class="co">Nimbus Analytics</div><div class="ro">Sr Director, Cloud Infrastructure</div>
-        <div class="jhbar"><i style="width:0%"></i></div>
-        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
-    </div>
-    <div class="jhcol"><h4>Interview <span>1</span></h4>
-      <div class="jhc"><span class="sc">4.6</span><div class="co">Datawright</div><div class="ro">Director, Platform Engineering</div>
-        <div class="jhbar"><i style="width:50%;background:var(--accent)"></i></div>
-        <div class="meta"><span class="rl" style="color:var(--accent)">50% ready</span><span class="jhchips"><i class="jhdot on"></i><i class="jhdot on"></i><i class="jhdot on"></i></span></div></div>
-    </div>
+  <p class="eyebrow" style="margin-top:34px;color:var(--muted)">How it works</p>
+  <div class="flow">
+    <figure class="shot">
+      <p class="cap"><span class="num">1</span>See your whole pipeline</p>
+      <img src="jobhelm-board.png" alt="JobHelm Kanban board: roles as cards across To apply, Applied, In touch, and Interview columns, each with a score and prep-readiness, plus a Next Best Actions rail" loading="lazy">
+      <figcaption>Every role as a card by stage, with score, prep-readiness, and a live "next best actions" rail. Search and stage filters up top.</figcaption>
+    </figure>
+    <figure class="shot">
+      <p class="cap"><span class="num">2</span>Drill into any role</p>
+      <img src="jobhelm-drawer.png" alt="JobHelm role drawer: readiness bar at 50% from real practice, materials chips, gaps to close, warm path, and one-click actions to generate questions, open the pack, or rehearse" loading="lazy">
+      <figcaption>Click a card to open the drawer: honest readiness, materials, gaps to close, warm paths, and one-click prep, rehearse, brief, and draft-reply.</figcaption>
+    </figure>
   </div>
-  <p class="lead" style="font-size:13px;margin-top:8px">A live demo board — JobHelm ships with sample data, so it renders the moment you clone. Readiness reflects <em>real practice</em> (a completed mock rep), not just prep files.</p>
+  <p class="lead" style="font-size:13px;margin-top:14px">Shown with the bundled sample data — JobHelm renders this board the moment you clone. Readiness reflects <em>real practice</em> (a completed mock rep), not just prep files.</p>
 
   <div class="grid" style="text-align:left;margin-top:30px">
     <div class="card"><div class="ic">🗂</div><h3>Pipeline board</h3><p>Every application as a card across stages, with search and stage filters. Click one to drill into readiness, gaps, and actions.</p></div>
