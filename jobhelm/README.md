@@ -97,6 +97,40 @@ Runs the sample board by default. Mount your own career-ops / DeskMock and set `
 
 Run JobHelm on its own for the demo, or with career-ops (+ DeskMock) for your real search.
 
+## Staying current with the base tools
+
+[career-ops](https://github.com/santifer/career-ops) and [DeepInterview](https://github.com/ngoanpv/DeepInterview) are the upstream "base" projects this stack builds on. To pull the latest into your clone:
+
+**If you cloned upstream directly** — just:
+
+```bash
+git pull
+```
+
+**If you forked it** (e.g. to contribute back) — add the original as `upstream` once, then fast-forward your `main`:
+
+```bash
+# one-time: point "upstream" at the original repo
+git remote add upstream https://github.com/santifer/career-ops.git       # career-ops
+# git remote add upstream https://github.com/ngoanpv/DeepInterview.git    # DeepInterview
+
+git fetch upstream
+git checkout main
+git merge --ff-only upstream/main     # clean fast-forward; stops if your main diverged
+git push origin main                  # update your fork
+```
+
+Keep your own feature/PR branches untouched — rebase them onto the new `main` only when you want the PR refreshed.
+
+career-ops also ships a **built-in updater that never touches your data**:
+
+```bash
+node update-system.mjs check          # is an update available?
+node update-system.mjs apply          # apply it (your cv.md, tracker, etc. are preserved)
+```
+
+> **Heads-up:** an update reverts **system files** (e.g. the résumé `templates/`). Keep customizations in the **user layer** (`config/profile.yml`, `modes/_custom.md`) so they survive — or re-apply template tweaks after updating.
+
 ## Troubleshooting
 
 | Symptom | Fix |
