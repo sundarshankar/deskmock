@@ -187,9 +187,9 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
 <section id="start"><div class="wrap">
   <p class="eyebrow">Get started</p>
   <h2>Set up in under a minute.</h2>
-  <p class="lead">A single Python script — <strong>no dependencies to install</strong>. You need Python 3.9+ and an OpenAI-compatible API key (or a local model). Voice is optional; you can start by typing.</p>
+  <p class="lead"><strong>One clone gives you both tools</strong> — DeskMock (mock interviews) and JobHelm (the command center). Pure Python, <strong>no dependencies to install</strong>. You need Python 3.9+ and an OpenAI-compatible API key (or a local model). Voice is optional; you can start by typing.</p>
 
-  <p class="step"><span class="num">1</span> Get the code</p>
+  <p class="step"><span class="num">1</span> Get the code (this repo ships both DeskMock and JobHelm)</p>
   <div class="codeblock">git clone https://github.com/sundarshankar/deskmock.git
 <span class="k">cd</span> deskmock</div>
 
@@ -197,14 +197,14 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
   <div class="codeblock"><span class="k">export</span> OPENROUTER_API_KEY=<span class="s">sk-or-your-key-here</span>
 <span class="c"># prefer a local model? skip the key and pass --base-url http://localhost:11434/v1</span></div>
 
-  <p class="step"><span class="num">3</span> Run it — type your answers, using the bundled sample CV + JD</p>
-  <div class="codeblock">python3 deskmock.py --clipboard
-<span class="c"># …or with your own CV and the real job description:</span>
-python3 deskmock.py --clipboard \
-  --cv <span class="s">my-cv.md</span> --jd <span class="s">role.txt</span> \
-  --role <span class="s">"Senior SWE"</span> --company <span class="s">"Acme"</span></div>
+  <p class="step"><span class="num">3</span> Run either tool — both work on bundled sample data</p>
+  <div class="codeblock"><span class="c"># DeskMock — mock interviews (type or dictate; /done for your scorecard)</span>
+python3 deskmock.py --clipboard
 
-  <p class="lead" style="font-size:15px">You'll get a question — type an answer, press Enter for feedback, and <code>/done</code> for your scorecard (<code>/repeat</code>, <code>/skip</code> too). Want it read aloud and hands-free? Add <code>--speak</code> and set up dictation — see the docs.</p>
+<span class="c"># JobHelm — job-search command center (opens a demo board at http://localhost:8899)</span>
+python3 jobhelm/mission-control.py</div>
+
+  <p class="lead" style="font-size:15px">Both run out of the box on the bundled samples, so they work the moment you clone. Point them at your own CV / job search when you're ready — see the docs. For DeskMock voice (read-aloud + hands-free dictation), add <code>--speak</code>.</p>
   <div class="cta" style="justify-content:flex-start;margin-top:22px">
     <a href="https://github.com/sundarshankar/deskmock#setup" class="btn p">Full setup &amp; voice guide</a>
     <a href="https://github.com/sundarshankar/deskmock#troubleshooting" class="btn">Troubleshooting</a>
