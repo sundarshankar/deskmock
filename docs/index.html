@@ -85,6 +85,22 @@ section .lead{color:var(--muted);font-size:17px;max-width:720px;margin:0 0 8px}
 .callout{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--panel)),var(--panel));
   border:1px solid color-mix(in srgb,var(--accent) 26%,var(--line));border-radius:var(--radius);padding:28px 26px;margin-top:30px}
 .callout h3{margin:0 0 8px;font-size:19px}.callout p{margin:0;color:var(--muted)}
+/* jobhelm board illustration */
+.jhboard{display:flex;gap:12px;overflow-x:auto;padding:6px 2px 12px;margin-top:26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:16px}
+.jhcol{flex:0 0 200px}
+.jhcol h4{margin:0 2px 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.jhcol h4 span{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:0 7px;color:var(--ink);font-size:11px}
+.jhc{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px}
+.jhc .sc{float:right;font-size:11px;font-weight:700;color:var(--accent2)}
+.jhc .co{font-weight:700;font-size:13px}
+.jhc .ro{font-size:11px;color:var(--muted);margin:1px 0 7px}
+.jhbar{height:5px;background:var(--line);border-radius:5px;overflow:hidden;margin:4px 0 5px}
+.jhbar i{display:block;height:100%}
+.jhc .meta{display:flex;justify-content:space-between;align-items:center}
+.jhc .rl{font-size:10.5px}
+.jhchips{display:flex;gap:3px}
+.jhdot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block}
+.jhdot.on{background:var(--accent)}
 /* pills */
 .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .pill{font-size:13px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
@@ -110,6 +126,7 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
     <a href="#what">What</a>
     <a href="#start">Setup</a>
     <a href="#features">Features</a>
+    <a href="#jobhelm">JobHelm</a>
     <a href="#faq">FAQ</a>
     <a href="https://github.com/sundarshankar/deskmock" class="btn">GitHub ↗</a>
   </div>
@@ -200,9 +217,56 @@ python3 deskmock.py --clipboard \
     <div class="card"><div class="ic">⚡</div><h3>No heavy stack</h3><p>No LiveKit, no cloud voice service, no GPU. A single command on modest hardware.</p></div>
   </div>
 
-  <div class="callout" style="text-align:left">
-    <h3>Meet its companion: JobHelm</h3>
-    <p>DeskMock is the rehearsal engine. In the <strong>same repo</strong>, <strong>JobHelm</strong> is the command center — a local dashboard for your whole search: a Kanban pipeline board, honest prep-readiness tracking, an in-app rehearse, recruiter-reply drafting, and next-best-actions. Same philosophy: your data, your machine, open source. Clone and run <code>python3 jobhelm/mission-control.py</code> for a live demo board. <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm" target="_blank" rel="noopener">Explore JobHelm →</a></p>
+</div></section>
+
+<section id="jobhelm"><div class="wrap">
+  <p class="eyebrow">The command center</p>
+  <h2>JobHelm — your whole search on one board.</h2>
+  <p class="lead">DeskMock rehearses you; <strong>JobHelm</strong> runs the search. In the <strong>same repo</strong>, it's a local dashboard for your entire pipeline — track every role, see honest prep-readiness, rehearse in-app, draft recruiter replies, and know the next best move. Same philosophy: your data, your machine, your key.</p>
+
+  <div class="jhboard" role="img" aria-label="JobHelm Kanban board showing roles across stages">
+    <div class="jhcol"><h4>To apply <span>1</span></h4>
+      <div class="jhc"><span class="sc">3.8</span><div class="co">Orbital Data</div><div class="ro">Director, FinOps</div>
+        <div class="jhbar"><i style="width:0%"></i></div>
+        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
+    </div>
+    <div class="jhcol"><h4>Applied <span>2</span></h4>
+      <div class="jhc"><span class="sc">4.5</span><div class="co">Vertex Cloud</div><div class="ro">Director, Developer Platform</div>
+        <div class="jhbar"><i style="width:0%"></i></div>
+        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
+      <div class="jhc"><span class="sc">4.2</span><div class="co">Helios Systems</div><div class="ro">VP, Reliability Engineering</div>
+        <div class="jhbar"><i style="width:0%"></i></div>
+        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
+    </div>
+    <div class="jhcol"><h4>In touch <span>1</span></h4>
+      <div class="jhc"><span class="sc">4.4</span><div class="co">Nimbus Analytics</div><div class="ro">Sr Director, Cloud Infrastructure</div>
+        <div class="jhbar"><i style="width:0%"></i></div>
+        <div class="meta"><span class="rl" style="color:var(--muted)">0% ready</span><span class="jhchips"><i class="jhdot"></i><i class="jhdot"></i><i class="jhdot"></i></span></div></div>
+    </div>
+    <div class="jhcol"><h4>Interview <span>1</span></h4>
+      <div class="jhc"><span class="sc">4.6</span><div class="co">Datawright</div><div class="ro">Director, Platform Engineering</div>
+        <div class="jhbar"><i style="width:50%;background:var(--accent)"></i></div>
+        <div class="meta"><span class="rl" style="color:var(--accent)">50% ready</span><span class="jhchips"><i class="jhdot on"></i><i class="jhdot on"></i><i class="jhdot on"></i></span></div></div>
+    </div>
+  </div>
+  <p class="lead" style="font-size:13px;margin-top:8px">A live demo board — JobHelm ships with sample data, so it renders the moment you clone. Readiness reflects <em>real practice</em> (a completed mock rep), not just prep files.</p>
+
+  <div class="grid" style="text-align:left;margin-top:30px">
+    <div class="card"><div class="ic">🗂</div><h3>Pipeline board</h3><p>Every application as a card across stages, with search and stage filters. Click one to drill into readiness, gaps, and actions.</p></div>
+    <div class="card"><div class="ic">🎯</div><h3>Honest readiness</h3><p>Per-role readiness counts <em>actual practice</em> (a mock with a scorecard), never mere prep files — so the number tells the truth.</p></div>
+    <div class="card"><div class="ic">🎤</div><h3>In-app rehearse</h3><p>Run a full mock interview in the browser — questions read aloud, type or dictate answers, feedback + scorecard, saved as a transcript.</p></div>
+    <div class="card"><div class="ic">✍️</div><h3>Draft replies</h3><p>Draft recruiter/HM responses in your voice with your contact details. Flags spam. Never auto-sends — you review and send.</p></div>
+    <div class="card"><div class="ic">🔎</div><h3>Discover</h3><p>Turns the scan firehose into a ranked shortlist of recent, in-location, on-target roles worth acting on.</p></div>
+    <div class="card"><div class="ic">🔥</div><h3>Next best actions</h3><p>Follow-ups due, prep gaps, and warm-path reminders — the short list of what to do today, surfaced for you.</p></div>
+  </div>
+
+  <p class="lead" style="font-weight:600;color:var(--ink);margin-top:30px">Try it — a populated demo board, no key or data needed:</p>
+  <div class="codeblock">git clone https://github.com/sundarshankar/deskmock.git
+<span class="k">cd</span> deskmock
+python3 jobhelm/mission-control.py   <span class="c"># opens http://localhost:8899</span></div>
+  <div class="cta" style="justify-content:flex-start;margin-top:18px">
+    <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm" class="btn p">Explore JobHelm</a>
+    <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm#readme" class="btn">JobHelm docs &amp; setup</a>
   </div>
 </div></section>
 
