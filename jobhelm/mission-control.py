@@ -109,11 +109,16 @@ def scan_coverage():
     # last run from scan-runs.tsv; board coverage from scan-history.tsv col 3 (source)
     last={}
     runs=[l for l in read(CO/"data/scan-runs.tsv").splitlines() if l.strip() and not l.startswith("timestamp")]
+    def g(c,i): return (c[i] if len(c)>i and c[i].strip() else "0")
     if runs:
         c=runs[-1].split("\t")
-        last=dict(when=(c[0][:16].replace("T"," ") if c else ""),
-                  companies=(c[2] if len(c)>2 else ""), found=(c[4] if len(c)>4 else ""),
-                  new=(c[13] if len(c)>13 else ""))
+        last=dict(when=(c[0][:16].replace("T"," ") if c else ""), status=g(c,1),
+                  companies=g(c,2), boards=g(c,3), found=g(c,4),
+                  f_title=g(c,5), f_location=g(c,7), f_age=g(c,8), f_salary=g(c,9),
+                  dupes=g(c,12), new=g(c,13), errors=g(c,14), f_blacklist=g(c,15))
+        try:
+            last["skipped"]=str(sum(int(g(c,i)) for i in (5,6,7,8,9,10,11,15,16,17,18)))
+        except Exception: last["skipped"]="0"
     cnt={}
     for l in read(CO/"data/scan-history.tsv").splitlines():
         c=l.split("\t")
@@ -248,8 +253,12 @@ def run(cmd, cwd):
 
 def do_scan():
     ok,out=run(["node","scan.mjs"],CO)
-    m=re.search(r"New offers added:\s*(\d+)",out)
-    return dict(ok=ok, msg=f"Scan done — {m.group(1) if m else '?'} new offers." if ok else f"Scan failed: {out[-200:]}")
+    if not ok: return dict(ok=False, msg=f"Scan failed: {out[-200:]}")
+    L=scan_coverage().get("last",{})
+    msg=(f"Scan done — {L.get('companies','?')} companies · {L.get('found','?')} found · "
+         f"{L.get('new','0')} NEW. Skipped {L.get('skipped','?')} "
+         f"({L.get('f_title','0')} title, {L.get('f_location','0')} location, {L.get('dupes','0')} dupes).")
+    return dict(ok=True, msg=msg)
 
 def do_apply(num):
     ok,out=run(["node","set-status.mjs",str(num),"Applied","--note","Marked Applied via JobHelm Mission Control"],CO)
@@ -605,7 +614,7 @@ details summary{color:var(--accent2)}
   </div>
   <div class="htools">
     <button onclick="openDraft()">✍️ Draft reply</button>
-    <button class="p" onclick="act('scan',{})">🔎 Scan</button>
+    <button class="p" onclick="doScan()">🔎 Scan</button>
     <button onclick="load()" title="Refresh">🔄</button>
   </div>
 </header>
@@ -680,7 +689,10 @@ async function load(){
     var L=sc.last||{};
     var pill=function(t){return '<span style="display:inline-block;background:var(--soft);border:1px solid var(--line);border-radius:20px;padding:3px 11px;font-size:12px;margin:0 5px 5px 0">'+t+'</span>';};
     var top=sc.top.map(function(b){return pill(esc(b.board)+' <b>'+Number(b.n).toLocaleString()+'</b>');}).join('');
-    el.innerHTML='<div style="color:var(--ink)"><b>Last scan:</b> '+esc(when)+(L.found?' · '+Number(L.found).toLocaleString()+' roles found':'')+(L.companies?' · '+esc(L.companies)+' companies':'')+((L.new&&L.new!=="0")?' · <b style="color:var(--accent)">'+esc(L.new)+' new</b>':'')+'</div>'+
+    var pairs=[[L.f_title,'off-target title'],[L.f_location,'location'],[L.f_age,'too old'],[L.f_salary,'salary'],[L.dupes,'already seen'],[L.f_blacklist,'blacklist']];
+    var brk=pairs.filter(function(p){return p[0]&&p[0]!=='0';}).map(function(p){return Number(p[0]).toLocaleString()+' '+p[1];}).join(' · ')||'none';
+    el.innerHTML='<div style="color:var(--ink)"><b>Last scan:</b> '+esc(when)+(L.found?' · '+Number(L.found).toLocaleString()+' roles found':'')+(L.companies?' · '+esc(L.companies)+' companies':'')+((L.new&&L.new!=="0")?' · <b style="color:var(--accent)">'+esc(L.new)+' new</b>':' · <span class="muted">0 new</span>')+'</div>'+
+      '<div style="margin-top:6px;color:var(--muted);font-size:12px"><b>Skipped '+(L.skipped?Number(L.skipped).toLocaleString():'0')+'</b> — '+brk+'</div>'+
       '<div style="margin-top:9px;color:var(--ink)"><b>'+sc.boards+' job boards covered</b> — top 5 by volume:</div>'+
       '<div style="margin-top:6px">'+top+'</div>';
   })();
@@ -857,6 +869,20 @@ async function act(kind,args){
   try{var r=await (await fetch('/api/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args||{})})).json();toast(r.msg);}
   catch(e){toast('Action failed.');_busy[kind]=false;return}
   setTimeout(load,500);}  // _busy clears on the 4s timer above — covers the mock process-startup window
+async function doScan(){
+  if(_busy['scan']){toast('A scan is already running — one moment…');return}
+  _busy['scan']=true;
+  var t0=Date.now();
+  var tick=setInterval(function(){var s=Math.round((Date.now()-t0)/1000);toast('<span class="spin"></span>Scanning job boards… '+s+'s (usually 30–60s). Results will appear under Discover → Scan coverage.',true);},1000);
+  try{
+    var r=await (await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})).json();
+    clearInterval(tick); _busy['scan']=false;
+    await load();
+    view('discover');
+    toast(r.msg||'Scan complete.');
+    var el=document.getElementById('scancov'); if(el){el.parentElement.style.boxShadow='0 0 0 2px var(--accent)';setTimeout(function(){el.parentElement.style.boxShadow='';},1800);}
+  }catch(e){clearInterval(tick);_busy['scan']=false;toast('Scan failed — see terminal.');}
+}
 async function genForCo(enc){var co=decodeURIComponent(enc);var p=DATA.pipeline.find(function(x){return x.company===co});if(p)act('questions',{num:p.num});else toast('Role not found');}
 async function brief(num){var box=document.getElementById('briefbox');box.style.display='block';box.innerHTML='<span class="spin"></span>researching…';
   var p=byNum(num);var r=await (await fetch('/api/brief',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({co:p.company})})).json();
