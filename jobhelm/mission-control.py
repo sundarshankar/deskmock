@@ -75,6 +75,28 @@ prep_files = [pathlib.Path(f).name for f in glob.glob(str(CO / "interview-prep/*
 def pack(co):  k=slug(co); return next((f for f in prep_files if k and k in slug(f) and "gap" not in f.lower() and "question" not in f.lower()), "")
 def gapd(co):  k=slug(co); return next((f for f in prep_files if k and k in slug(f) and "gap" in f.lower()), "")
 def n_mock():  return len(glob.glob(str(MOCK / "transcripts/*.md")))
+
+_BOARD_NAMES={"workday":"Workday","icims":"iCIMS","greenhouse":"Greenhouse","lever":"Lever",
+              "ashby":"Ashby","weworkremotely":"WeWorkRemotely","himalayas":"Himalayas",
+              "remoteok":"RemoteOK","jobspy":"JobSpy"}
+def scan_coverage():
+    # last run from scan-runs.tsv; board coverage from scan-history.tsv col 3 (source)
+    last={}
+    runs=[l for l in read(CO/"data/scan-runs.tsv").splitlines() if l.strip() and not l.startswith("timestamp")]
+    if runs:
+        c=runs[-1].split("\t")
+        last=dict(when=(c[0][:16].replace("T"," ") if c else ""),
+                  companies=(c[2] if len(c)>2 else ""), found=(c[4] if len(c)>4 else ""),
+                  new=(c[13] if len(c)>13 else ""))
+    cnt={}
+    for l in read(CO/"data/scan-history.tsv").splitlines():
+        c=l.split("\t")
+        if len(c)<3 or not c[2].strip(): continue
+        src=re.sub(r"-(full|api)$","",c[2].strip().lower())
+        cnt[src]=cnt.get(src,0)+1
+    top=[dict(board=_BOARD_NAMES.get(k,k.replace("-"," ").title()), n=v)
+         for k,v in sorted(cnt.items(), key=lambda x:-x[1])[:5]]
+    return dict(last=last, boards=len(cnt), top=top)
 def mocks_for(co):
     # transcripts are named  <timestamp>-<company-slug>.md  (DeskMock writes the company in)
     k=slug(co)
@@ -186,7 +208,7 @@ def build_state():
                    interviewing=cnt("Interview","Responded"),offers=cnt("Offer","Hired"),
                    newmatches=len(pipe),prep_avg=avg,mock=nm),
         pipeline=pipeline, new_matches=pipe, next_actions=na, standing_gaps=sg,
-        profile=profile(),
+        profile=profile(), scan=scan_coverage(),
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
 # ---------- actions ----------
@@ -205,6 +227,14 @@ def do_scan():
 def do_apply(num):
     ok,out=run(["node","set-status.mjs",str(num),"Applied","--note","Marked Applied via JobHelm Mission Control"],CO)
     return dict(ok=ok, msg="Marked Applied ✓" if ok else f"Failed: {out[-200:]}")
+
+def do_discard(num):
+    ok,out=run(["node","set-status.mjs",str(num),"Discarded","--note","Discarded via JobHelm — posting closed / no longer available"],CO)
+    return dict(ok=ok, msg="Marked Discarded ✓ — removed from the active board." if ok else f"Failed: {out[-200:]}")
+
+def do_reject(num):
+    ok,out=run(["node","set-status.mjs",str(num),"Rejected","--note","Marked Rejected via JobHelm"],CO)
+    return dict(ok=ok, msg="Marked Rejected ✓ — removed from the active board." if ok else f"Failed: {out[-200:]}")
 
 def _mock_running():
     try:
@@ -563,6 +593,7 @@ details summary{color:var(--accent2)}
 <!-- DISCOVER VIEW -->
 <div id="v-discover" style="display:none">
   <div class="disc">
+    <div class="panel" style="margin-bottom:16px"><h2>🛰 Scan coverage</h2><div id="scancov" class="sm muted">loading…</div></div>
     <div class="panel" style="margin-bottom:16px"><h2>🆕 New matches · last 7 days (profile + location filtered)</h2>
       <table><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
     </div>
@@ -602,10 +633,20 @@ function view(v){
 
 async function load(){
   try{DATA=await (await fetch('/api/data')).json();}catch(e){toast('Load failed — is the server running?');return}
-  document.getElementById('ts').textContent='live · '+DATA.ts+' · '+location.host;
+  var sc=DATA.scan||{last:{},top:[],boards:0}; var when=(sc.last&&sc.last.when)?sc.last.when:'—';
+  document.getElementById('ts').textContent='live · '+DATA.ts+' · 🛰 scan '+when+' · '+location.host;
   var s=DATA.stats;
   var T=[['Tracked',s.tracked,0],['Applied',s.applied,0],['Interviewing',s.interviewing,0],['Offers',s.offers,0],['Avg ready',s.prep_avg+'%',1],['Mocks',s.mock,0],['New',s.newmatches,0]];
   document.getElementById('strip').innerHTML=T.map(function(t){return '<div class="stat'+(t[2]?' hl':'')+'"><div class="n">'+t[1]+'</div><div class="l">'+t[0]+'</div></div>'}).join('');
+  (function(){var el=document.getElementById('scancov'); if(!el)return;
+    if(!sc.top||!sc.top.length){el.innerHTML='No scan history yet — run a scan (🔎 Scan) to populate coverage.';return;}
+    var L=sc.last||{};
+    var pill=function(t){return '<span style="display:inline-block;background:var(--soft);border:1px solid var(--line);border-radius:20px;padding:3px 11px;font-size:12px;margin:0 5px 5px 0">'+t+'</span>';};
+    var top=sc.top.map(function(b){return pill(esc(b.board)+' <b>'+Number(b.n).toLocaleString()+'</b>');}).join('');
+    el.innerHTML='<div style="color:var(--ink)"><b>Last scan:</b> '+esc(when)+(L.found?' · '+Number(L.found).toLocaleString()+' roles found':'')+(L.companies?' · '+esc(L.companies)+' companies':'')+((L.new&&L.new!=="0")?' · <b style="color:var(--accent)">'+esc(L.new)+' new</b>':'')+'</div>'+
+      '<div style="margin-top:9px;color:var(--ink)"><b>'+sc.boards+' job boards covered</b> — top 5 by volume:</div>'+
+      '<div style="margin-top:6px">'+top+'</div>';
+  })();
   // stage filter chips
   document.getElementById('stagechips').innerHTML='<span class="fchip'+(FILTER===null?' on':'')+'" onclick="setFilter(null)">All</span>'+
     STAGES.map(function(st){var n=DATA.pipeline.filter(function(p){return stageOf(p.status)===st[0]}).length;
@@ -687,6 +728,10 @@ function renderDrawer(p){
       '<button class="sm p" onclick="openMock(\\''+p.num+'\\')">🎤 Rehearse here</button>'+
       '<button class="sm" onclick="act(\\'mock\\',{num:\\''+p.num+'\\'})">🎙 Voice (Terminal)</button>'+
       (stageOf(p.status)==='evaluated'?'<button class="sm" onclick="act(\\'apply\\',{num:\\''+p.num+'\\'})">✓ Mark applied</button>':'')+
+    '</div>'+
+    '<div class="actions" style="margin-top:8px">'+
+      '<button class="sm" title="Posting closed / cancelled / no longer available" onclick="if(confirm(\\'Discard '+esc(p.company)+'? (posting closed / not available) — it drops off the active board.\\'))act(\\'discard\\',{num:\\''+p.num+'\\'})">🗑 Discard (not available)</button>'+
+      '<button class="sm" title="Rejected by the company" onclick="if(confirm(\\'Mark '+esc(p.company)+' Rejected? It drops off the active board.\\'))act(\\'reject\\',{num:\\''+p.num+'\\'})">✗ Rejected</button>'+
     '</div></div>'+
     '<div class="sec"><div class="h">✍️ Draft a reply (review before sending)</div>'+
       '<textarea id="dmsg" style="width:100%;min-height:64px" placeholder="Paste recruiter/HM message for '+esc(p.company)+'…"></textarea>'+
@@ -799,6 +844,8 @@ class H(BaseHTTPRequestHandler):
         args=json.loads(self.rfile.read(ln) or "{}") if ln else {}
         if   p=="/api/scan":  self._send(200,json.dumps(do_scan()))
         elif p=="/api/apply": self._send(200,json.dumps(do_apply(args.get("num"))))
+        elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
+        elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
         elif p=="/api/draft": self._send(200,json.dumps(do_draft(args.get("message",""))))
         elif p=="/api/open":  self._send(200,json.dumps(do_open(args.get("co",""))))
