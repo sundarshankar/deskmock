@@ -46,8 +46,34 @@ def apps():
         if not re.match(r"^\|\s*\d+\s*\|", line): continue
         c = [x.strip() for x in line.strip().strip("|").split("|")]
         if len(c) < 6: continue
-        out.append(dict(num=c[0], date=c[1], company=c[2], role=c[3], score=c[4], status=c[5]))
+        out.append(dict(num=c[0], date=c[1], company=c[2], role=c[3], score=c[4], status=c[5],
+                        report=(c[7] if len(c)>7 else ""), notes=(c[8] if len(c)>8 else "")))
     return out
+
+def report_file(a):
+    m=re.search(r"\(([^)]*reports/([^)]+\.md))\)", a.get("report",""))
+    return m.group(2) if m else ""
+
+_AGG=("linkedin.","indeed.","glassdoor.","ziprecruiter.","himalayas.","weworkremotely.","dice.","monster.")
+def _is_company(u): return bool(u) and not any(a in u.lower() for a in _AGG)
+def saved_jd(a):
+    k=slug(a["company"])
+    for f in glob.glob(str(CO/"jds/*")):
+        if k and k in slug(pathlib.Path(f).name): return pathlib.Path(f).name
+    return ""
+def jd_url(a):
+    # PREFER the company/ATS link over 3rd-party aggregators (LinkedIn/Indeed), which expire fast.
+    urls=[]
+    rf=report_file(a)
+    if rf:
+        m=re.search(r"\*\*URL:\*\*\s*(\S+)", read(CO/"reports"/rf))
+        if m and m.group(1).startswith("http"): urls.append(m.group(1))
+    sj=saved_jd(a)
+    if sj: urls += re.findall(r"https?://\S+", read(CO/"jds"/sj))
+    urls += re.findall(r"https?://\S+", a.get("notes",""))
+    urls=[u.rstrip(".,;)") for u in urls]
+    company=[u for u in urls if _is_company(u)]
+    return company[0] if company else (urls[0] if urls else "")
 
 def pipeline_recent():
     POS = re.compile(r'\b(director|vp|vice president|head|sr\.? director|senior director)\b', re.I)
@@ -187,6 +213,7 @@ def build_state():
                    materials=(30 if pack(a["company"]) else 0)+(20 if gapd(a["company"]) else 0)+(15 if has_questions(a["company"]) else 0),
                    hasresume=bool(resume_for(a["company"],a["num"])),
                    contact=(cb.get(slug(a["company"]),[""])[0]),
+                   jd=jd_url(a), report=report_file(a), jdsaved=bool(saved_jd(a)),
                    gaps=sg[:2], nextact=nextact(a),
                    stage=(STAGES.index(a["status"].lower())+1 if a["status"].lower() in STAGES else 0))
               for a in sorted(active,key=lambda x:(-(readiness(x["company"])), x["company"].lower()))]
@@ -303,6 +330,16 @@ def do_draft(message):
         return dict(ok=True, msg="Draft ready — review before sending.", draft=txt)
     except Exception as e:
         return dict(ok=False, msg=f"Draft failed: {e}")
+
+def do_open_jd(num):
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    f=saved_jd(a) if a else ""
+    if not f: return dict(ok=False, msg="No archived JD saved for this role yet.")
+    try:
+        subprocess.Popen(["open", str(CO/"jds"/f)])
+        return dict(ok=True, msg=f"Opened saved JD: {f}")
+    except Exception as e:
+        return dict(ok=False, msg=str(e))
 
 def do_open(co):
     f = pack(co) or gapd(co)
@@ -712,6 +749,12 @@ function renderDrawer(p){
       '<div class="sm muted" style="margin-top:7px">🎙 '+(p.nmock||0)+' real mock rep(s) — '+((p.nmock||0)>=2?'ready':'do '+(2-(p.nmock||0))+' more to be ready')+'</div>'+
       '<div class="h" style="margin-top:13px">Materials assembled <span style="text-transform:none;font-weight:400;color:var(--muted)">(useful, but not the same as being ready)</span></div>'+
       '<div style="margin-top:5px">'+chips+'</div></div>'+
+    '<div class="sec"><div class="h">🔗 Job posting</div>'+
+      (p.jd?('<a href="'+esc(p.jd)+'" target="_blank" rel="noopener">View JD ↗</a> <span class="sm muted">'+(/(linkedin|indeed|glassdoor|ziprecruiter)/i.test(p.jd)?'(3rd-party — may expire)':'(company / ATS)')+'</span>'):'<span class="sm muted">no saved link</span>')+
+      '<div style="margin-top:6px">'+
+      '<a class="sm" href="https://www.google.com/search?q='+encodeURIComponent(p.company+' careers '+p.role)+'" target="_blank" rel="noopener">🔎 Find on company careers ↗</a>'+
+      (p.jdsaved?' &nbsp; <button class="sm" onclick="act(\\'open_jd\\',{num:\\''+p.num+'\\'})">📄 Saved JD</button>':' &nbsp; <span class="sm muted">no archived copy yet</span>')+
+      '</div></div>'+
     '<div class="sec"><div class="h">▶ Next action</div><b>'+esc(p.nextact)+'</b></div>'+
     '<div class="sec"><div class="h">⚠️ Gaps to close</div><ul class="glist">'+gaps+'</ul></div>'+
     '<div class="sec"><div class="h">🤝 Warm path</div>'+(p.contact?esc(p.contact):'<span class="muted">none yet — find a contact</span>')+'</div>'+
@@ -849,6 +892,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
         elif p=="/api/draft": self._send(200,json.dumps(do_draft(args.get("message",""))))
         elif p=="/api/open":  self._send(200,json.dumps(do_open(args.get("co",""))))
+        elif p=="/api/open_jd": self._send(200,json.dumps(do_open_jd(args.get("num"))))
         elif p=="/api/open_resume": self._send(200,json.dumps(do_open_resume(args.get("num"))))
         elif p=="/api/questions": self._send(200,json.dumps(do_questions(args.get("num"))))
         elif p=="/api/questions_all": self._send(200,json.dumps(do_questions_all()))
