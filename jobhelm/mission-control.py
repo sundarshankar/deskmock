@@ -298,6 +298,26 @@ def do_apply(num):
     ok,out=run(["node","set-status.mjs",str(num),"Applied","--note","Marked Applied via JobHelm Mission Control"],CO)
     return dict(ok=ok, msg="Marked Applied ✓" if ok else f"Failed: {out[-200:]}")
 
+def do_select(url, company="", title="", posted=""):
+    company=(company or "").strip(); title=(title or "").strip()
+    if not (company and title): return dict(ok=False, msg="Missing role details.")
+    for a in apps():
+        if slug(a["company"])==slug(company) and slug(a["role"])==slug(title):
+            return dict(ok=True, msg=f"{company} — {title} is already on your board.")
+    nums=[int(a["num"]) for a in apps() if a["num"].isdigit()]
+    num=str((max(nums)+1) if nums else 1)
+    date=datetime.datetime.now().strftime("%Y-%m-%d")
+    note=f"Selected from Discover {date}; pending evaluation."
+    tsv=f"{num}\t{date}\t{company}\t{title}\tEvaluated\tN/A\t❌\t\t{note}\t{url}\n"
+    try:
+        d=CO/"batch/tracker-additions"; d.mkdir(parents=True, exist_ok=True)
+        (d/f"{num.zfill(3)}-{slug(company) or 'role'}.tsv").write_text(tsv)
+    except Exception as e:
+        return dict(ok=False, msg=f"Write failed: {e}")
+    ok,out=run(["node","merge-tracker.mjs"],CO)
+    if not ok: return dict(ok=False, msg=f"Add failed: {out[-200:]}")
+    return dict(ok=True, msg=f"✓ Added {company} to your board (To apply). Open it to tailor a résumé.")
+
 def do_discard(num):
     ok,out=run(["node","set-status.mjs",str(num),"Discarded","--note","Discarded via JobHelm — posting closed / no longer available"],CO)
     return dict(ok=ok, msg="Marked Discarded ✓ — removed from the active board." if ok else f"Failed: {out[-200:]}")
@@ -780,8 +800,10 @@ async function load(){
   document.getElementById('gaps').innerHTML=(DATA.standing_gaps.length?DATA.standing_gaps:['Run a gap analysis to populate this.']).map(function(g){return '<li>'+esc(g)+'</li>'}).join('');
   // discover
   document.getElementById('nm').innerHTML=(DATA.new_matches.length?DATA.new_matches:[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
-    var ig=m.url?'<button class="sm" title="Hide from Discover" onclick="ignoreMatch(this,\\''+encodeURIComponent(m.url)+'\\',\\''+encodeURIComponent(m.company||'')+'\\',\\''+encodeURIComponent(m.title||'')+'\\',\\''+esc(m.posted||'')+'\\')">🚫 Ignore</button>':'';
-    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td>'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+ig+'</td></tr>'}).join('');
+    var args="(this,\\''+encodeURIComponent(m.url||'')+'\\',\\''+encodeURIComponent(m.company||'')+'\\',\\''+encodeURIComponent(m.title||'')+'\\',\\''+esc(m.posted||'')+'\\')";
+    var sel=(m.company&&m.title)?'<button class="sm p" title="Add to your board (To apply)" onclick="selectMatch'+args+'">➕ Select</button> ':'';
+    var ig=m.url?'<button class="sm" title="Hide from Discover" onclick="ignoreMatch'+args+'">🚫 Ignore</button>':'';
+    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
   var ign=DATA.ignored||[];
   var ib=document.getElementById('ignored');
   if(ib) ib.innerHTML = ign.length ? ign.map(function(m){
@@ -795,6 +817,13 @@ async function ignoreMatch(btn,url,co,title,posted){
   toast('Ignored — hidden from Discover'); load();
 }
 async function unignoreMatch(url){ await postJSON('/api/unignore',{url:decodeURIComponent(url)}); toast('Restored to Discover'); load(); }
+async function selectMatch(btn,url,co,title,posted){
+  if(btn){btn.disabled=true; btn.textContent='… adding';}
+  var r=await postJSON('/api/select',{url:decodeURIComponent(url),company:decodeURIComponent(co),title:decodeURIComponent(title),posted:posted});
+  toast(r.msg);
+  if(r.ok){ if(btn){var tr=btn.closest('tr'); if(tr)tr.style.opacity='.4';} setTimeout(function(){load();view('board');},700); }
+  else if(btn){btn.disabled=false; btn.textContent='➕ Select';}
+}
 
 function setFilter(k){FILTER=k;load();}
 
@@ -1023,6 +1052,7 @@ class H(BaseHTTPRequestHandler):
         args=json.loads(self.rfile.read(ln) or "{}") if ln else {}
         if   p=="/api/scan":  self._send(200,json.dumps(do_scan()))
         elif p=="/api/apply": self._send(200,json.dumps(do_apply(args.get("num"))))
+        elif p=="/api/select": self._send(200,json.dumps(do_select(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
         elif p=="/api/setup": self._send(200,json.dumps(do_setup(args)))
         elif p=="/api/ignore": self._send(200,json.dumps(do_ignore(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
         elif p=="/api/unignore": self._send(200,json.dumps(do_unignore(args.get("url",""))))
