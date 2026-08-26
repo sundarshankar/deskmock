@@ -35,6 +35,9 @@ DeskMock should be the one place that links the whole prep:
 - **Technical** round prep.
 - **Latest articles** on the role's tech stack (scan recent writing to complement prep).
 - **Note-taking** per role/round.
+- **Technical-question matching** to the JD (per-dimension question sets grounded in the CV).
+- **Flashcards** for key concepts.
+- **Curated resource library** per dimension (leadership · technical/SRE · system design · behavioral) — see [PREP-RESOURCES.md](PREP-RESOURCES.md); auto-link the matching ones per JD.
 - **DeepInterview** for structured prep + **DeskMock** voice/in-app rehearsal with a scorecard.
 - Honest **readiness** driven by real practice, never artifact existence.
 
