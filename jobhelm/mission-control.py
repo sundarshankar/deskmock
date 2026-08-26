@@ -75,6 +75,28 @@ def jd_url(a):
     company=[u for u in urls if _is_company(u)]
     return company[0] if company else (urls[0] if urls else "")
 
+def _ignored_rows():
+    out=[]
+    for ln in read(CO/"data/jobhelm-ignored.tsv").splitlines():
+        c=ln.split("\t")
+        if c and c[0].startswith("http"):
+            out.append(dict(url=c[0], posted=(c[1] if len(c)>1 else ""),
+                            company=(c[2] if len(c)>2 else ""), title=(c[3] if len(c)>3 else "")))
+    return out
+def _ignored_set(): return {r["url"].split("?")[0] for r in _ignored_rows()}
+def do_ignore(url, company="", title="", posted=""):
+    if not (url or "").startswith("http"): return dict(ok=False, msg="No URL to ignore.")
+    if url.split("?")[0] in _ignored_set(): return dict(ok=True, msg="Already ignored.")
+    with (CO/"data/jobhelm-ignored.tsv").open("a") as f: f.write(f"{url}\t{posted}\t{company}\t{title}\n")
+    return dict(ok=True, msg=f"Ignored{(' — '+company) if company else ''}.")
+def do_unignore(url):
+    p=CO/"data/jobhelm-ignored.tsv"
+    if not p.exists(): return dict(ok=True, msg="ok")
+    key=(url or "").split("?")[0]
+    lines=[ln for ln in read(p).splitlines() if ln.strip() and ln.split("\t")[0].split("?")[0]!=key]
+    p.write_text("\n".join(lines)+("\n" if lines else ""))
+    return dict(ok=True, msg="Restored to Discover.")
+
 def pipeline_recent():
     POS = re.compile(r'\b(director|vp|vice president|head|sr\.? director|senior director)\b', re.I)
     DOM = re.compile(r'\b(cloud|platform|infrastructure|infra|sre|reliability|devops|engineering|technolog)', re.I)
@@ -95,7 +117,9 @@ def pipeline_recent():
     ds = [d(r["posted"]) for r in rows if d(r["posted"])]
     mx = max(ds) if ds else None
     rows = [r for r in rows if d(r["posted"]) and mx and (mx-d(r["posted"])).days <= 7]
-    return sorted(rows, key=lambda r: r["posted"], reverse=True)[:15]
+    ign = _ignored_set()
+    rows = [r for r in rows if r["url"].split("?")[0] not in ign]
+    return sorted(rows, key=lambda r: r["posted"], reverse=True)[:40]
 
 prep_files = [pathlib.Path(f).name for f in glob.glob(str(CO / "interview-prep/*.md"))]
 def pack(co):  k=slug(co); return next((f for f in prep_files if k and k in slug(f) and "gap" not in f.lower() and "question" not in f.lower()), "")
@@ -240,7 +264,8 @@ def build_state():
                    interviewing=cnt("Interview","Responded"),offers=cnt("Offer","Hired"),
                    newmatches=len(pipe),prep_avg=avg,mock=nm),
         pipeline=pipeline, new_matches=pipe, next_actions=na, standing_gaps=sg,
-        profile=profile(), scan=scan_coverage(),
+        profile=profile(), scan=scan_coverage(), setup=setup_status(),
+        ignored=list(reversed(_ignored_rows()))[:40],
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
 # ---------- actions ----------
@@ -312,6 +337,35 @@ def load_key():
     for p in (CO/"openrouter.env", HERE/"openrouter.env"):
         if p.exists(): return p.read_text().strip()
     return ""
+
+def setup_status():
+    cv=(CO/"cv.md").exists() and len(read(CO/"cv.md").strip())>60
+    prof=(CO/"config/profile.yml").exists()
+    return dict(cv=cv, profile=prof, key=bool(load_key()), ready=(cv and bool(load_key())))
+
+def do_setup(d):
+    written=[]
+    resume=(d.get("resume") or "").strip()
+    name=(d.get("name") or "").strip(); email=(d.get("email") or "").strip()
+    phone=(d.get("phone") or "").strip(); loc=(d.get("location") or "").strip()
+    titles=(d.get("titles") or "").strip(); key=(d.get("key") or "").strip()
+    try:
+        if resume:
+            (CO/"cv.md").write_text(resume if resume.lstrip().startswith("#") else f"# {name or 'Candidate'}\n{loc}\n\n{resume}\n")
+            written.append("cv.md (résumé)")
+        if name or email or loc:
+            (CO/"config").mkdir(parents=True, exist_ok=True)
+            (CO/"config/profile.yml").write_text(f'name: "{name}"\nemail: "{email}"\nphone: "{phone}"\nlocation: "{loc}"\n')
+            written.append("profile")
+        if key.startswith("sk-"):
+            (CO/"openrouter.env").write_text(key); written.append("API key")
+        if titles:
+            (CO/"jobhelm-targets.txt").write_text(titles); written.append("target roles")
+    except Exception as e:
+        return dict(ok=False, msg=f"Setup failed: {e}")
+    if not written:
+        return dict(ok=False, msg="Nothing to save — add at least your résumé and API key.")
+    return dict(ok=True, msg="Saved "+", ".join(written)+". You're set up — hit Scan to start.")
 
 def _scrub_contact_placeholders(t):
     # some models emit [PHONE]/[Your Number]/[EMAIL] rather than the real value — swap them in.
@@ -622,6 +676,7 @@ details summary{color:var(--accent2)}
     <button id="tab-discover" onclick="view('discover')">Discover</button>
   </div>
   <div class="htools">
+    <button onclick="openSetup()" title="Enter your résumé, profile, and API key">🚀 Setup</button>
     <button onclick="openDraft()">✍️ Draft reply</button>
     <button class="p" onclick="doScan()">🔎 Scan</button>
     <button onclick="load()" title="Refresh">🔄</button>
@@ -652,6 +707,9 @@ details summary{color:var(--accent2)}
     <div class="panel" style="margin-bottom:16px"><h2>🆕 New matches · last 7 days (profile + location filtered)</h2>
       <table><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
     </div>
+    <div class="panel" style="margin-bottom:16px"><details><summary style="cursor:pointer;font-weight:600;color:var(--muted)">🚫 Ignored / seen (<span id="igncount">0</span>) — hidden from Discover</summary>
+      <table style="margin-top:10px"><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="ignored"></tbody></table>
+    </details></div>
   </div>
 </div>
 
@@ -690,6 +748,9 @@ async function load(){
   try{DATA=await (await fetch('/api/data')).json();}catch(e){toast('Load failed — is the server running?');return}
   var sc=DATA.scan||{last:{},top:[],boards:0}; var when=(sc.last&&sc.last.when)?sc.last.when:'—';
   document.getElementById('ts').textContent='live · '+DATA.ts+' · 🛰 scan '+when+' · '+location.host;
+  if(DATA.setup && !DATA.setup.ready && !window._setupPrompted){window._setupPrompted=true;
+    toast('👋 Welcome — click 🚀 Setup to add your résumé, profile, and API key to get started.',true);
+    setTimeout(function(){var t=document.getElementById('toast');if(t)t.classList.remove('show');},7000);}
   var s=DATA.stats;
   var T=[['Tracked',s.tracked,0],['Applied',s.applied,0],['Interviewing',s.interviewing,0],['Offers',s.offers,0],['Avg ready',s.prep_avg+'%',1],['Mocks',s.mock,0],['New',s.newmatches,0]];
   document.getElementById('strip').innerHTML=T.map(function(t){return '<div class="stat'+(t[2]?' hl':'')+'"><div class="n">'+t[1]+'</div><div class="l">'+t[0]+'</div></div>'}).join('');
@@ -719,9 +780,21 @@ async function load(){
   document.getElementById('gaps').innerHTML=(DATA.standing_gaps.length?DATA.standing_gaps:['Run a gap analysis to populate this.']).map(function(g){return '<li>'+esc(g)+'</li>'}).join('');
   // discover
   document.getElementById('nm').innerHTML=(DATA.new_matches.length?DATA.new_matches:[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
-    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td>'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a>':'')+'</td></tr>'}).join('');
+    var ig=m.url?'<button class="sm" title="Hide from Discover" onclick="ignoreMatch(this,\\''+encodeURIComponent(m.url)+'\\',\\''+encodeURIComponent(m.company||'')+'\\',\\''+encodeURIComponent(m.title||'')+'\\',\\''+esc(m.posted||'')+'\\')">🚫 Ignore</button>':'';
+    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td>'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+ig+'</td></tr>'}).join('');
+  var ign=DATA.ignored||[];
+  var ib=document.getElementById('ignored');
+  if(ib) ib.innerHTML = ign.length ? ign.map(function(m){
+    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td>'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+'<button class="sm" onclick="unignoreMatch(\\''+encodeURIComponent(m.url)+'\\')">↩ Restore</button></td></tr>'}).join('') : '<tr><td colspan="4" class="muted sm">Nothing ignored yet.</td></tr>';
+  var ic=document.getElementById('igncount'); if(ic) ic.textContent=ign.length;
   if(_openNum!=null){var p=byNum(_openNum);if(p)renderDrawer(p);}
 }
+async function ignoreMatch(btn,url,co,title,posted){
+  if(btn){var tr=btn.closest('tr'); if(tr)tr.style.opacity='.4';}
+  await postJSON('/api/ignore',{url:decodeURIComponent(url),company:decodeURIComponent(co),title:decodeURIComponent(title),posted:posted});
+  toast('Ignored — hidden from Discover'); load();
+}
+async function unignoreMatch(url){ await postJSON('/api/unignore',{url:decodeURIComponent(url)}); toast('Restored to Discover'); load(); }
 
 function setFilter(k){FILTER=k;load();}
 
@@ -869,6 +942,34 @@ function openDraft(){_openNum=null;
     '<div id="ddraft" style="display:none" class="draftbox"></div></div></div>';
   document.getElementById('drawer').classList.add('show');document.getElementById('scrim').classList.add('show');document.body.style.overflow='hidden';}
 
+function openSetup(){_openNum=null;
+  var s=DATA.setup||{};
+  function fld(id,label,ph,ta){return '<div class="sec"><div class="h">'+label+'</div>'+(ta?
+    '<textarea id="set_'+id+'" style="width:100%;min-height:150px" placeholder="'+ph+'"></textarea>':
+    '<input id="set_'+id+'" style="width:100%" placeholder="'+ph+'">')+'</div>';}
+  document.getElementById('drawer-inner').innerHTML=
+    '<div class="dhub"><button class="x" onclick="closeDrawer()">×</button><div class="co">🚀 Getting started</div><div class="ro">Enter your details once — JobHelm writes them locally. Nothing leaves your machine.</div></div>'+
+    '<div class="dbody">'+
+    '<div class="sm muted" style="margin-bottom:10px">Status: résumé '+(s.cv?'✅':'—')+' · profile '+(s.profile?'✅':'—')+' · API key '+(s.key?'✅':'—')+'</div>'+
+    fld('name','Your name','e.g. Alex Rivera')+
+    '<div style="display:flex;gap:8px"><div style="flex:1">'+fld('email','Email','you@example.com')+'</div><div style="flex:1">'+fld('phone','Phone (optional)','555-0100')+'</div></div>'+
+    fld('location','Location / work preference','e.g. Remote (US) or Atlanta, GA')+
+    fld('titles','Target roles (comma-separated)','e.g. Director Platform Engineering, VP Infrastructure, Head of SRE')+
+    fld('key','OpenRouter API key','sk-or-... (get one at openrouter.ai) — powers drafts, briefs, rehearse')+
+    fld('resume','Paste your résumé','Paste your full résumé here (plain text or markdown). This becomes your cv.md.',true)+
+    '<div style="margin-top:6px"><button class="sm p" onclick="saveSetup()">💾 Save &amp; get started</button> <span id="setupmsg" class="sm muted"></span></div>'+
+    '<div class="sm muted" style="margin-top:8px">Writes to <code>cv.md</code>, <code>config/profile.yml</code>, and <code>openrouter.env</code> — all local. Edit anytime.</div>'+
+    '</div>';
+  document.getElementById('drawer').classList.add('show');document.getElementById('scrim').classList.add('show');document.body.style.overflow='hidden';}
+async function saveSetup(){
+  var g=function(id){var e=document.getElementById('set_'+id);return e?e.value:'';};
+  var body={name:g('name'),email:g('email'),phone:g('phone'),location:g('location'),titles:g('titles'),key:g('key'),resume:g('resume')};
+  document.getElementById('setupmsg').textContent='saving…';
+  var r=await postJSON('/api/setup',body);
+  document.getElementById('setupmsg').textContent=r.msg;
+  if(r.ok){toast(r.msg);setTimeout(function(){load();closeDrawer();},900);}
+}
+
 /* ---------- actions ---------- */
 var _busy={};
 async function act(kind,args){
@@ -922,6 +1023,9 @@ class H(BaseHTTPRequestHandler):
         args=json.loads(self.rfile.read(ln) or "{}") if ln else {}
         if   p=="/api/scan":  self._send(200,json.dumps(do_scan()))
         elif p=="/api/apply": self._send(200,json.dumps(do_apply(args.get("num"))))
+        elif p=="/api/setup": self._send(200,json.dumps(do_setup(args)))
+        elif p=="/api/ignore": self._send(200,json.dumps(do_ignore(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
+        elif p=="/api/unignore": self._send(200,json.dumps(do_unignore(args.get("url",""))))
         elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
         elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
