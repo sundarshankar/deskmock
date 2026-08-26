@@ -97,6 +97,19 @@ def do_unignore(url):
     p.write_text("\n".join(lines)+("\n" if lines else ""))
     return dict(ok=True, msg="Restored to Discover.")
 
+def match_score(title, loc):
+    # zero-LLM heuristic fit (1.0-5.0) from title+location vs the profile. A triage signal, not a full eval.
+    t=(title or "").lower(); l=(loc or "").lower(); s=2.5
+    if re.search(r'\bvp\b|vice president|head of|\bcto\b|senior director|sr\.? director', t): s+=1.5
+    elif re.search(r'\bdirector\b', t): s+=1.2
+    elif re.search(r'\bmanager\b|\blead\b', t): s+=0.3
+    if re.search(r'platform engineering|cloud infrastructure|site reliab|\bsre\b|infrastructure|\binfra\b', t): s+=1.0
+    elif re.search(r'platform|cloud|reliability|devops', t): s+=0.6
+    elif re.search(r'engineering|technolog', t): s+=0.3
+    if re.search(r'remote|anywhere|atlanta|georgia|\bga\b', l): s+=0.5
+    elif (not l) or re.search(r'united states|\bus\b', l): s+=0.2
+    return round(min(5.0, max(1.0, s)), 1)
+
 def pipeline_recent():
     POS = re.compile(r'\b(director|vp|vice president|head|sr\.? director|senior director)\b', re.I)
     DOM = re.compile(r'\b(cloud|platform|infrastructure|infra|sre|reliability|devops|engineering|technolog)', re.I)
@@ -110,7 +123,7 @@ def pipeline_recent():
         title = parts[2] if len(parts)>2 else ""; loc = parts[3] if len(parts)>3 else ""
         mp = re.search(r"posted:\s*([\d-]+)", line); posted = mp.group(1) if mp else ""
         if POS.search(title) and DOM.search(title) and not NEG.search(title) and ((not loc) or LOC.search(loc)):
-            rows.append(dict(url=url, company=company, title=title, posted=posted))
+            rows.append(dict(url=url, company=company, title=title, posted=posted, score=match_score(title, loc)))
     def d(s):
         try: return datetime.date.fromisoformat(s)
         except Exception: return None
@@ -119,7 +132,13 @@ def pipeline_recent():
     rows = [r for r in rows if d(r["posted"]) and mx and (mx-d(r["posted"])).days <= 7]
     ign = _ignored_set()
     rows = [r for r in rows if r["url"].split("?")[0] not in ign]
-    return sorted(rows, key=lambda r: r["posted"], reverse=True)[:40]
+    rows.sort(key=lambda r: (r["score"], r["posted"]), reverse=True)   # best fit first
+    seen=set(); uniq=[]                                                # collapse same role from
+    for r in rows:                                                     # different boards (LinkedIn + ATS)
+        k=(slug(r["company"]), slug(r["title"]))
+        if k in seen: continue
+        seen.add(k); uniq.append(r)
+    return uniq[:40]
 
 prep_files = [pathlib.Path(f).name for f in glob.glob(str(CO / "interview-prep/*.md"))]
 def pack(co):  k=slug(co); return next((f for f in prep_files if k and k in slug(f) and "gap" not in f.lower() and "question" not in f.lower()), "")
@@ -728,8 +747,9 @@ details summary{color:var(--accent2)}
 <div id="v-discover" style="display:none">
   <div class="disc">
     <div class="panel" style="margin-bottom:16px"><h2>🛰 Scan coverage</h2><div id="scancov" class="sm muted">loading…</div></div>
-    <div class="panel" style="margin-bottom:16px"><h2>🆕 New matches · last 7 days (profile + location filtered)</h2>
-      <table><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
+    <div class="panel" style="margin-bottom:16px"><h2>🆕 New matches · last 7 days · best fit first</h2>
+      <table><thead><tr><th>Fit</th><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
+      <div class="sm muted" style="margin-top:8px">Fit = a quick title/location heuristic vs your profile — the full score comes when you Select &amp; evaluate.</div>
     </div>
     <div class="panel" style="margin-bottom:16px"><details><summary style="cursor:pointer;font-weight:600;color:var(--muted)">🚫 Ignored / seen (<span id="igncount">0</span>) — hidden from Discover</summary>
       <table style="margin-top:10px"><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="ignored"></tbody></table>
@@ -807,7 +827,9 @@ async function load(){
     var args="(this,'"+encodeURIComponent(m.url||'')+"','"+encodeURIComponent(m.company||'')+"','"+encodeURIComponent(m.title||'')+"','"+esc(m.posted||'')+"')";
     var sel=(m.company&&m.title)?'<button class="sm p" title="Add to your board (To apply)" onclick="selectMatch'+args+'">➕ Select</button> ':'';
     var ig=m.url?'<button class="sm" title="Hide from Discover" onclick="ignoreMatch'+args+'">🚫 Ignore</button>':'';
-    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
+    var sc=m.score||0, scc=(sc>=4?'var(--accent)':sc>=3.2?'var(--amber)':'var(--muted)');
+    var sccell=m.company?'<td><b style="color:'+scc+'">'+sc.toFixed(1)+'</b><span class="sm muted">/5</span></td>':'<td></td>';
+    return '<tr>'+sccell+'<td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
   var ign=DATA.ignored||[];
   var ib=document.getElementById('ignored');
   if(ib) ib.innerHTML = ign.length ? ign.map(function(m){
