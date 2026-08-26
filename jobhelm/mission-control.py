@@ -318,6 +318,10 @@ def do_select(url, company="", title="", posted=""):
     if not ok: return dict(ok=False, msg=f"Add failed: {out[-200:]}")
     return dict(ok=True, msg=f"✓ Added {company} to your board (To apply). Open it to tailor a résumé.")
 
+def do_unselect(num):
+    ok,out=run(["node","set-status.mjs",str(num),"Discarded","--note","Unselected from board via JobHelm"],CO)
+    return dict(ok=ok, msg="↩ Unselected — removed from your board." if ok else f"Failed: {out[-200:]}")
+
 def do_discard(num):
     ok,out=run(["node","set-status.mjs",str(num),"Discarded","--note","Discarded via JobHelm — posting closed / no longer available"],CO)
     return dict(ok=ok, msg="Marked Discarded ✓ — removed from the active board." if ok else f"Failed: {out[-200:]}")
@@ -800,7 +804,7 @@ async function load(){
   document.getElementById('gaps').innerHTML=(DATA.standing_gaps.length?DATA.standing_gaps:['Run a gap analysis to populate this.']).map(function(g){return '<li>'+esc(g)+'</li>'}).join('');
   // discover
   document.getElementById('nm').innerHTML=(DATA.new_matches.length?DATA.new_matches:[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
-    var args="(this,\\''+encodeURIComponent(m.url||'')+'\\',\\''+encodeURIComponent(m.company||'')+'\\',\\''+encodeURIComponent(m.title||'')+'\\',\\''+esc(m.posted||'')+'\\')";
+    var args="(this,'"+encodeURIComponent(m.url||'')+"','"+encodeURIComponent(m.company||'')+"','"+encodeURIComponent(m.title||'')+"','"+esc(m.posted||'')+"')";
     var sel=(m.company&&m.title)?'<button class="sm p" title="Add to your board (To apply)" onclick="selectMatch'+args+'">➕ Select</button> ':'';
     var ig=m.url?'<button class="sm" title="Hide from Discover" onclick="ignoreMatch'+args+'">🚫 Ignore</button>':'';
     return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
@@ -831,7 +835,7 @@ function card(p){
   var pc='<span class="dot'+(p.haspack?' on':'')+'" title="prep pack"></span><span class="dot'+(p.hasq?' on':'')+'" title="questions"></span><span class="dot'+(p.hasgap?' on':'')+'" title="gap analysis"></span>';
   var qa='';
   var st=stageOf(p.status);
-  if(st==='evaluated') qa='<button class="sm p" onclick="event.stopPropagation();act(\\'apply\\',{num:\\''+p.num+'\\'})">Mark applied</button>';
+  if(st==='evaluated') qa='<button class="sm p" onclick="event.stopPropagation();act(\\'apply\\',{num:\\''+p.num+'\\'})">Mark applied</button> <button class="sm" title="Remove from board" onclick="event.stopPropagation();if(confirm(\\'Unselect '+esc(p.company)+' — remove from your board?\\'))act(\\'unselect\\',{num:\\''+p.num+'\\'})">↩ Unselect</button>';
   else if(!p.hasq) qa='<button class="sm" onclick="event.stopPropagation();act(\\'questions\\',{num:\\''+p.num+'\\'})">Gen Qs</button>';
   else qa='<button class="sm" onclick="event.stopPropagation();openMock(\\''+p.num+'\\')">Rehearse</button>';
   return '<div class="kc" onclick="openDrawer(\\''+p.num+'\\')">'+
@@ -1053,6 +1057,7 @@ class H(BaseHTTPRequestHandler):
         if   p=="/api/scan":  self._send(200,json.dumps(do_scan()))
         elif p=="/api/apply": self._send(200,json.dumps(do_apply(args.get("num"))))
         elif p=="/api/select": self._send(200,json.dumps(do_select(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
+        elif p=="/api/unselect": self._send(200,json.dumps(do_unselect(args.get("num"))))
         elif p=="/api/setup": self._send(200,json.dumps(do_setup(args)))
         elif p=="/api/ignore": self._send(200,json.dumps(do_ignore(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
         elif p=="/api/unignore": self._send(200,json.dumps(do_unignore(args.get("url",""))))
