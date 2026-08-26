@@ -255,9 +255,18 @@ def do_scan():
     ok,out=run(["node","scan.mjs"],CO)
     if not ok: return dict(ok=False, msg=f"Scan failed: {out[-200:]}")
     L=scan_coverage().get("last",{})
-    msg=(f"Scan done — {L.get('companies','?')} companies · {L.get('found','?')} found · "
+    msg=(f"Scan done — {L.get('companies','?')} ATS companies · {L.get('found','?')} found · "
          f"{L.get('new','0')} NEW. Skipped {L.get('skipped','?')} "
          f"({L.get('f_title','0')} title, {L.get('f_location','0')} location, {L.get('dupes','0')} dupes).")
+    # widen the net — JobSpy (LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google) if its venv is set up
+    jv=HOME/"src/findingnemo/.jobspy-venv/bin/python"
+    if jv.exists() and (CO/"jobspy-scan.py").exists():
+        try:
+            r=subprocess.run([str(jv),"jobspy-scan.py","--days","7"],cwd=CO,capture_output=True,text=True,timeout=600)
+            mj=re.search(r"appended (\d+) to pipeline", r.stdout or "")
+            msg+=f" + LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google: {mj.group(1) if mj else '0'} NEW."
+        except Exception as e:
+            msg+=f" (aggregator scan skipped: {str(e)[:60]})"
     return dict(ok=True, msg=msg)
 
 def do_apply(num):

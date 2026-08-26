@@ -14,7 +14,7 @@ Kanban board  →  drill into a role  →  prep readiness + gaps
 - **Pipeline board** — Kanban of every application by stage (To apply → Applied → In touch → Interview → Offer), with search + filters
 - **Prep readiness** — honest per-role readiness based on *actual practice* (a mock rep with a scorecard), with prep materials tracked separately
 - **In-app rehearse** — a full mock interview in the browser: questions read aloud (browser TTS), you type or dictate, feedback + scorecard, saved as a transcript. No Terminal, no extra tooling.
-- **Discover** — turns the scan firehose into a ranked shortlist of relevant, recent, in-location roles
+- **Discover** — turns the scan firehose into a ranked shortlist of relevant, recent, in-location roles. Coverage spans **ATS at the source** (Greenhouse, Lever, Ashby, Workday, iCIMS — via career-ops) **plus the consumer aggregators** (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google — via [JobSpy](https://github.com/speedyapply/JobSpy), when its venv is set up) and niche remote boards. The 🔎 Scan button runs both. See the [roadmap](../ROADMAP.md) for the full 360° vision.
 - **Draft replies** — draft recruiter/HM responses in your voice with your contact details; flags spam; never auto-sends
 - **Company briefs & question sets** — generated from the role + your CV, for prep
 - **Next best actions** — follow-ups due, prep gaps, warm-path reminders, at a glance
