@@ -20,3 +20,7 @@ OPENROUTER_API_KEY=sk-or-your-key-here
 # JOBHELM_LOCATIONS="remote|anywhere|united states|\bus\b"
 # JOBHELM_PORT=8899
 # JOBHELM_HOST=127.0.0.1
+
+# --- Optional: widen 🔎 Scan with JobSpy (LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google) ---
+# Point at a Python where `pip install python-jobspy` has been run, plus a jobspy-scan.py in your career-ops.
+# JOBHELM_JOBSPY=/path/to/.jobspy-venv/bin/python

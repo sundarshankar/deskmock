@@ -23,13 +23,15 @@ Everything that calls an LLM (drafts, briefs, question sets, in-app rehearse) us
 
 ## Setup
 
-JobHelm is a single Python script — **no dependencies to install** (standard library only).
+JobHelm is a single Python script — **no dependencies to install** (standard library only). It ships inside the [DeskMock](https://github.com/sundarshankar/deskmock) repo as `jobhelm/`, so one clone gives you both tools.
+
+> **Node** is only needed later, for the optional **Scan** and **Mark applied** actions (they shell out to career-ops `node` scripts) and for `clean-markers.mjs`. You don't need it to run the demo board or rehearse.
 
 **1. Get the code**
 
 ```bash
-git clone https://github.com/sundarshankar/jobhelm.git
-cd jobhelm
+git clone https://github.com/sundarshankar/deskmock.git
+cd deskmock
 ```
 
 **2. Check Python** (3.9 or newer)
@@ -41,7 +43,7 @@ python3 --version
 **3. Run it — with the bundled sample data**
 
 ```bash
-python3 mission-control.py
+python3 jobhelm/mission-control.py
 ```
 
 It opens `http://localhost:8899` to a populated **demo board** so you can click around immediately — no key or data required just to look.
@@ -50,7 +52,7 @@ It opens `http://localhost:8899` to a populated **demo board** so you can click 
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-your-key-here
-python3 mission-control.py
+python3 jobhelm/mission-control.py
 ```
 
 (Prefer a local model? It works with any OpenAI-compatible endpoint — the model/base-url are set on the LLM side.)
@@ -64,7 +66,7 @@ export JOBHELM_NAME="Your Name"                  # used in reply drafts
 export JOBHELM_MOBILE="555-0100"                 # optional
 export JOBHELM_EMAIL="you@example.com"           # optional
 export JOBHELM_PROFILE="a platform engineering leader targeting Sr Director/VP roles (remote)"
-python3 mission-control.py
+python3 jobhelm/mission-control.py
 ```
 
 See [`config.example`](config.example) for all variables.
@@ -88,6 +90,7 @@ Runs the sample board by default. Mount your own career-ops / DeskMock and set `
 | `JOBHELM_PROFILE` | `a candidate` | one line describing the roles you target — steers reply drafts |
 | `JOBHELM_LOCATIONS` | `remote\|anywhere\|united states\|us` | regex of location keywords to keep in Discover |
 | `JOBHELM_PORT` / `JOBHELM_HOST` | `8899` / `127.0.0.1` | where the server binds |
+| `JOBHELM_JOBSPY` | — | path to a Python with [JobSpy](https://github.com/speedyapply/JobSpy) installed (`pip install python-jobspy`); enables the LinkedIn/Indeed/etc. leg of 🔎 Scan |
 | `OPENROUTER_API_KEY` | — | your LLM key (or drop an `openrouter.env` next to the script) |
 
 ## How it relates to career-ops and DeskMock
@@ -139,12 +142,12 @@ node update-system.mjs apply          # apply it (your cv.md, tracker, etc. are 
 | Drafts / briefs / rehearse say "No key" | `export OPENROUTER_API_KEY=sk-or-...` in the same shell, or drop an `openrouter.env` file next to the script. |
 | Scan / "Mark applied" fail | Those shell out to career-ops (`node scan.mjs`, `set-status.mjs`). They need a real career-ops checkout with Node installed — they don't run against the sample data or inside the container. |
 | Rehearse "Voice (Terminal)" does nothing | That launches DeskMock; set `JOBHELM_MOCK` to your DeskMock checkout. Or use **Rehearse here** (in-app), which needs no extra setup. |
-| Port already in use | `JOBHELM_PORT=8900 python3 mission-control.py` |
+| Port already in use | `JOBHELM_PORT=8900 python3 jobhelm/mission-control.py` |
 
 ## Tests
 
 ```bash
-python3 test_mission_control.py      # runs against the bundled sample data, no network
+python3 jobhelm/test_mission_control.py      # runs against the bundled sample data, no network
 ```
 
 ## Credits
