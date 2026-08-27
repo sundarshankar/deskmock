@@ -548,36 +548,63 @@ def _llm(msgs, key, max_tokens=900):
     with urllib.request.urlopen(req,timeout=90) as r:
         return json.load(r)["choices"][0]["message"]["content"].strip()
 
-def _gen_questions_for(company, role):
+# rehearsal-safety: every metric you'd say out loud must trace to your CV
+_ATTR_RULE=("When you cite a metric, use the CV's EXACT figure for that specific employer — never round, "
+            "inflate, or attribute a global/aggregate number (e.g. total engineers led) to a single company. ")
+
+def _jd_text_for(a):
+    # the actual posting for this role: archived JD file (career-ops jds/), else tracker notes
+    f=saved_jd(a)
+    if f:
+        t=read(CO/"jds"/f)
+        if t.strip(): return t[:4000], "archived JD"
+    note=(a.get("note") or a.get("notes") or "").strip()
+    return (note[:1500], "tracker note") if note else ("", "")
+
+def _gen_questions_for(a):
+    company, role = a["company"], a["role"]
     key=load_key()
     if not key: return (False,"no key")
     cv=read(CO/"cv.md")[:3500]
-    sys=("Generate a focused interview prep pack for a specific role, grounded in the candidate's real CV. "
+    jd, jdsrc = _jd_text_for(a)
+    sys=("Generate a focused interview prep pack for a SPECIFIC job posting, grounded in the candidate's real CV. "
          "Return markdown: 8-10 likely questions across Behavioral, Technical, and Leadership (tag each with its "
-         "dimension). For EACH question provide:\n"
+         "dimension). "
+         + ("Target THIS posting: pull the questions from the job description's named stack, responsibilities, and "
+            "must-haves — a technical question for each key technology/practice it names, leadership/behavioral "
+            "questions for the scope and challenges it implies. " if jd else
+            "No JD text is available, so target the role title and seniority. ")
+         + "For EACH question provide:\n"
          "1. **Question**\n"
-         "2. **Model answer** — a ready-to-review answer in the candidate's first-person voice, grounded ONLY in "
-         "their real CV. Use STAR (Situation, Task, Action, Result) for behavioral/leadership; a structured "
-         "technical explanation for technical. Confident, specific, plain-ASCII. CRITICAL: never invent facts, "
-         "metrics, employers, or projects. Where a specific number or example would strengthen the answer but is "
-         "NOT in the CV, insert a bracketed prompt like [add your metric] or [add a specific example] instead of "
-         "making one up.\n"
+         "2. **Model answer** — a ready-to-review answer written in the candidate's first-person voice, grounded "
+         "ONLY in their real CV. Use STAR (Situation, Task, Action, Result) for behavioral/leadership; a "
+         "structured technical explanation for technical. Confident, specific, plain-ASCII, no smart quotes or "
+         "em-dashes. CRITICAL: never invent facts, metrics, employers, or projects. "+_ATTR_RULE+"Where a specific "
+         "number or example would strengthen the answer but is NOT in the CV, insert a bracketed prompt like "
+         "[add your metric] or [add a specific example] instead of making one up.\n"
          "3. **Power phrases** — 2 crisp expressions to reuse.\n"
+         "Write in first person throughout. Do NOT add a candidate-name line or any name placeholder like "
+         "[PERSON_NAME]/[Candidate Name] — the reader is the candidate.\n"
          "Realistic for the role and seniority. The goal: the candidate can scan, internalize, and rehearse these.")
-    usr=f"Role: {role} at {company}.\n\nCandidate CV (the ONLY source of truth for facts):\n{cv}\n\nProduce the prep pack with model answers."
+    usr=(f"Role: {role} at {company}.\n\n"
+         + (f"JOB DESCRIPTION (target the questions to THIS posting):\n{jd}\n\n" if jd else "")
+         + f"Candidate CV (the ONLY source of truth for facts):\n{cv}\n\nProduce the prep pack with model answers.")
     try:
         md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,3200)
     except Exception as e:
         return (False,str(e))
+    md=re.sub(r'^[*\s>_-]*Candidate:\s*\[[^\]]*\]\s*$','',md,flags=re.I|re.M)
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    tag = f"tailored to the {jdsrc}" if jd else "role-level (no JD on file)"
     out=CO/"interview-prep"/f"{slug(company)}-questions.md"
-    out.write_text(f"# Interview prep — {role} @ {company}\n_(questions + model answers, grounded in your CV. Review, personalize the [brackets], then rehearse in DeskMock.)_\n\n{md}\n")
+    out.write_text(f"# Interview prep — {role} @ {company}\n_(questions + model answers, {tag}, grounded in your CV. Review, personalize the [brackets], then rehearse in DeskMock.)_\n\n{md}\n")
     prep_files.append(out.name)
-    return (True,out.name)
+    return (True, out.name + (f" ({jdsrc})" if jd else " (no JD — role-level)"))
 
 def do_questions(num):
     a=next((x for x in apps() if x["num"]==str(num)),None)
     if not a: return dict(ok=False,msg="Role not found.")
-    ok,info=_gen_questions_for(a["company"],a["role"])
+    ok,info=_gen_questions_for(a)
     return dict(ok=ok, msg=(f"Generated {info} ✓ — rehearse in DeskMock." if ok else f"Failed: {info}"))
 
 def do_questions_all():
@@ -585,9 +612,193 @@ def do_questions_all():
     targets=[a for a in apps() if a["status"].lower() in ("applied","interview","responded")
              and not next((f for f in prep_files if slug(a["company"]) in slug(f) and "question" in f.lower()),"")]
     for a in targets:
-        ok,_=_gen_questions_for(a["company"],a["role"]);
+        ok,_=_gen_questions_for(a);
         done+=1 if ok else 0; fail+=0 if ok else 1
     return dict(ok=True, msg=f"Generated question sets for {done} applied role(s)" + (f"; {fail} failed" if fail else "") + ".")
+
+# curated open-source prep resources by dimension (mirrors ../PREP-RESOURCES.md)
+CURATED={
+ "leadership":[("kaushikb9/em-interviews","EM/Director/VP interview questions"),
+   ("engineering-management/awesome-engineering-management","EM & leadership practice"),
+   ("ronikobrosly/awesome-data-leadership","data/eng leadership"),
+   ("kuchin/awesome-cto","CTO/exec-level playbook")],
+ "behavioral":[("ashishps1/awesome-behavioral-interviews","STAR prep, common questions"),
+   ("yangshun/tech-interview-handbook","behavioral + general")],
+ "technical":[("dastergon/awesome-sre","the canonical SRE reading list"),
+   ("seifrajhi/awesome-platform-engineering-tools","platform engineering landscape"),
+   ("wmariuss/awesome-devops","DevOps practices & tooling")],
+ "system":[("donnemartin/system-design-primer","the standard system-design ref"),
+   ("ashishps1/awesome-system-design-resources","patterns & case studies")],
+}
+def _reslinks(*cats):
+    out=[]
+    for c in cats:
+        for n,d in CURATED.get(c,[]): out.append(f"- [{n}](https://github.com/{n}) — {d}")
+    return "\n".join(out)
+
+def _untraced_metrics(md, cv):
+    cvn=re.sub(r'[,\s]','',cv.lower())
+    bad=[]
+    # metric-like tokens only; units must be ATTACHED so "2025 Kubernetes" / "1. Building" aren't misread
+    pat=r'\$\d[\d,\.]*\s?[kmb]?\+?|\d[\d,\.]*%|\d[\d,\.]*(?:billion|million)\b|\d[\d,\.]*[kmb]\+?(?![a-z])|\d{3,}\+?'
+    for t in re.findall(pat, md, re.I):
+        core=re.sub(r'[,\s]','',t.lower())
+        if re.fullmatch(r'(19|20)\d\d', core): continue
+        base=re.sub(r'(\+|%|billion|million|[kmb])+$','',core)
+        if core in cvn or (base and base in cvn): continue
+        bad.append(t.strip())
+    return sorted(set(bad))
+
+def _gen_leadership_for(a):
+    company,role=a["company"],a["role"]
+    key=load_key()
+    if not key: return (False,"no key")
+    cv=read(CO/"cv.md")[:3000]; jd,jdsrc=_jd_text_for(a)
+    sys=("Create a LEADERSHIP round prep brief for a senior platform/cloud/infrastructure leader (Director/VP/Head). "
+         "Grounded ONLY in the candidate's real CV; never invent facts, metrics, employers, or teams. "+_ATTR_RULE+
+         "Plain-ASCII, first person, no name or [PERSON_NAME] placeholder. Markdown with these sections:\n"
+         + ("Tailor to the JD below — reference the org scope, team size, and challenges it names.\n" if jd else "")
+         + "## Leadership themes this round will probe\n(org design & scaling teams, hiring/retention, stakeholder & "
+         "exec influence, reliability-vs-cost tradeoffs, driving operational culture, delivery under constraint) — "
+         "pick the 4-5 most relevant to THIS role.\n"
+         "## My leadership narrative\n3-4 first-person talking points that map the candidate's REAL experience to "
+         "those themes (STAR-ish; use [add a specific example]/[add your metric] where the CV lacks a detail).\n"
+         "## Likely leadership questions\n5-6 questions with a one-line angle each on how to answer from the CV.")
+    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth):\n{cv}\n\nProduce the leadership brief."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2600)
+    except Exception as e: return (False,str(e))
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    out=CO/"interview-prep"/f"{slug(company)}-leadership.md"
+    out.write_text(f"# Leadership prep — {role} @ {company}\n_(grounded in your CV; personalize the [brackets]. {'Tailored to '+jdsrc if jd else 'role-level'}.)_\n\n{md}\n\n## Curated leadership & behavioral resources\n{_reslinks('leadership','behavioral')}\n")
+    prep_files.append(out.name)
+    return (True,out.name)
+
+def _gen_articles_for(a):
+    company,role=a["company"],a["role"]
+    key=load_key()
+    if not key: return (False,"no key")
+    jd,jdsrc=_jd_text_for(a)
+    sys=("You build a STACK READING GUIDE so a candidate sounds current in a technical interview. "
+         "From the role (and JD if given), identify the 5-7 key technologies/practices that matter (e.g. Kubernetes, "
+         "Terraform/IaC, service mesh, observability/SRE, FinOps, CI/CD, cloud platform). For EACH: **what to be "
+         "current on** (one line) and **why it matters for THIS role** (one line). Then a short **'go deeper'** list "
+         "of search queries the candidate should run for THIS WEEK's articles (do NOT fabricate specific headlines, "
+         "dates, or URLs — you cannot see live news; give the search query instead). Plain-ASCII, no name placeholder.")
+    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+"Produce the stack reading guide."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2200)
+    except Exception as e: return (False,str(e))
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    out=CO/"interview-prep"/f"{slug(company)}-articles.md"
+    out.write_text(f"# Stack & articles — {role} @ {company}\n_(key topics to be current on{' from '+jdsrc if jd else ''}. Run the search queries for this week's writing.)_\n\n{md}\n\n## Curated technical, SRE & system-design resources\n{_reslinks('technical','system')}\n")
+    prep_files.append(out.name)
+    return (True,out.name)
+
+def _md2html(md):
+    out=[]; lst=None
+    def close():
+        nonlocal lst
+        if lst: out.append(f"</{lst}>"); lst=None
+    def inline(s):
+        s=html.escape(s)
+        s=re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'<a href="\2">\1</a>', s)
+        s=re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', s)
+        s=re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<em>\1</em>', s)
+        s=re.sub(r'`([^`]+)`', r'<code>\1</code>', s)
+        return s
+    for raw in (md or "").split('\n'):
+        ln=raw.rstrip()
+        if not ln.strip(): close(); continue
+        m=re.match(r'(#{1,4})\s+(.*)', ln)
+        if m: close(); n=len(m.group(1)); out.append(f"<h{n}>{inline(m.group(2))}</h{n}>"); continue
+        if ln.strip() in ('---','***','___'): close(); out.append('<hr>'); continue
+        m=re.match(r'\s*[-*+]\s+(.*)', ln)
+        if m:
+            if lst!='ul': close(); out.append('<ul>'); lst='ul'
+            out.append(f"<li>{inline(m.group(1))}</li>"); continue
+        m=re.match(r'\s*\d+[\.\)]\s+(.*)', ln)
+        if m:
+            if lst!='ol': close(); out.append('<ol>'); lst='ol'
+            out.append(f"<li>{inline(m.group(1))}</li>"); continue
+        close(); out.append(f"<p>{inline(ln)}</p>")
+    close()
+    return "\n".join(out)
+
+_PREP_CSS=("<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"
+  "color:#1a1a1a;line-height:1.5;max-width:760px;margin:0 auto;padding:36px 40px}"
+  "h1{font-size:21px;border-bottom:2px solid #1a1a2e;padding-bottom:6px;margin:30px 0 12px}"
+  "h2{font-size:16px;color:#1a1a2e;margin:22px 0 6px}h3{font-size:13.5px;margin:15px 0 4px}"
+  "p{margin:7px 0}li{margin:4px 0}a{color:#1a1a2e;text-decoration:none}code{background:#f2f2f4;padding:1px 5px;"
+  "border-radius:3px;font-size:12px}hr{border:none;border-top:1px solid #ddd;margin:18px 0}em{color:#444}"
+  ".pgbreak{page-break-before:always}</style>")
+
+def _make_prep_pack_file(company, role):
+    # Combine the three prep .md files into one document. Always produce HTML (no deps);
+    # render a clean PDF too IF career-ops' generate-pdf.mjs is available (Playwright).
+    parts=[]
+    for s in ("questions","leadership","articles"):
+        f=CO/"interview-prep"/f"{slug(company)}-{s}.md"
+        if f.exists() and read(f).strip():
+            cls=' class="pgbreak"' if parts else ''
+            parts.append(f"<section{cls}>"+_md2html(read(f))+"</section>")
+    if not parts: return (False, None, "no pack files to render")
+    doc=f"<!doctype html><html><head><meta charset='utf-8'>{_PREP_CSS}</head><body>"+"\n".join(parts)+"</body></html>"
+    outhtml=CO/"interview-prep"/f"{slug(company)}-prep.html"; outhtml.write_text(doc)
+    if (CO/"generate-pdf.mjs").exists():
+        outpdf=CO/"interview-prep"/f"{slug(company)}-prep-pack.pdf"
+        ok,gout=run(["node","generate-pdf.mjs",str(outhtml),str(outpdf),"--format=letter"],CO)
+        if ok:
+            cm=HERE.parent/"clean-markers.mjs"   # bundled at the deskmock repo root
+            if cm.exists(): run(["node",str(cm),"clean",str(outpdf),"--author",(NAME or "Candidate")], cm.parent)
+            return (True, outpdf, outpdf.name)
+    return (True, outhtml, outhtml.name+" (HTML — open in a browser, print to PDF)")
+
+def do_preppack(num):
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False,msg="Role not found.")
+    r={}
+    r["questions"]=_gen_questions_for(a)
+    r["leadership"]=_gen_leadership_for(a)
+    r["articles"]=_gen_articles_for(a)
+    ok=all(v[0] for v in r.values())
+    jd,jdsrc=_jd_text_for(a)
+    parts=[("questions","interview questions"),("leadership","leadership pack"),("articles","stack & articles")]
+    got=[label for k,label in parts if r[k][0]]
+    fail=[f"{label}: {r[k][1]}" for k,label in parts if not r[k][0]]
+    cv=read(CO/"cv.md")
+    blob="\n".join(read(CO/"interview-prep"/f"{slug(a['company'])}-{s}.md") for s in ("questions","leadership","articles"))
+    untraced=_untraced_metrics(blob, cv)
+    pdfok,_pth,pdfinfo=_make_prep_pack_file(a["company"],a["role"])
+    tag = f" (JD-tailored via {jdsrc})" if jd else " (role-level — no JD on file)"
+    msg=f"Prep pack for {a['company']}{tag}: "+", ".join(got)+(" ✓" if ok else "")
+    msg+= (" · metrics: all trace to your CV ✓" if not untraced
+           else " · ⚠️ VERIFY these metrics (not found verbatim in CV): "+", ".join(untraced[:6]))
+    msg+= (f" · doc: {pdfinfo}" if pdfok else f" · doc failed: {pdfinfo}")
+    if fail: msg+=" — failed: "+"; ".join(fail)
+    return dict(ok=ok, msg=msg, untraced=untraced)
+
+def do_open_prep_pdf(num):
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False,msg="Role not found.")
+    sc=slug(a['company'])
+    pdf=CO/"interview-prep"/f"{sc}-prep-pack.pdf"; htmlf=CO/"interview-prep"/f"{sc}-prep.html"
+    target = pdf if pdf.exists() else (htmlf if htmlf.exists() else None)
+    if target is None:
+        if not any((CO/"interview-prep"/f"{sc}-{s}.md").exists() for s in ("questions","leadership","articles")):
+            return dict(ok=False,msg="No prep pack yet — click 'Generate prep pack' first.")
+        ok,target,info=_make_prep_pack_file(a["company"],a["role"])
+        if not ok: return dict(ok=False,msg=f"Could not build prep doc: {info}")
+    try: subprocess.Popen(["open", str(target)])
+    except Exception as e: return dict(ok=False,msg=str(e))
+    return dict(ok=True,msg=f"Opened {target.name}")
+
+def do_preppack_selected():
+    dead={"rejected","discarded","skip","hired"}
+    live=[a for a in apps() if a["status"].lower() not in dead]
+    done=[]; failed=[]
+    for a in live:
+        r=do_preppack(a["num"])
+        (done if r["ok"] else failed).append(a["company"])
+    return dict(ok=True, msg=f"Prep packs built for {len(done)} selected role(s)"+(f"; issues: {', '.join(failed)}" if failed else "")+".")
 
 def do_brief(company):
     if not (company or "").strip(): return dict(ok=False,msg="No company.")
@@ -924,14 +1135,16 @@ function renderDrawer(p){
       '<div class="sm muted" style="margin-top:6px">Drag the bookmarklet up to your bookmarks bar once. On a Greenhouse application form, click it to fill name, email, phone, location, LinkedIn. You attach the résumé and click Submit yourself.</div>'+
       '<details style="margin-top:7px"><summary class="sm" style="cursor:pointer">Copy field pack (works on any ATS)</summary><pre class="fieldpack">'+fieldPack()+'</pre></details>'+
     '</div>'+
-    '<div class="sec"><div class="h">Actions</div><div class="actions">'+
-      '<button class="sm p" onclick="act(\\'questions\\',{num:\\''+p.num+'\\'})">🧠 Gen questions</button>'+
-      (p.haspack?'<button class="sm" onclick="act(\\'open\\',{co:byNum(\\''+p.num+'\\').company})">📂 Open pack</button>':'')+
+    '<div class="sec"><div class="h">📚 Interview prep</div><div class="actions">'+
+      '<button class="sm p" onclick="if(confirm(\\'Generate the full prep pack (JD questions + model answers, leadership brief, stack/articles) for '+esc(p.company)+'? ~60s\\'))act(\\'preppack\\',{num:\\''+p.num+'\\'})">📚 Generate prep pack</button>'+
+      '<button class="sm" onclick="act(\\'questions\\',{num:\\''+p.num+'\\'})">🧠 Questions only</button>'+
+      '<button class="sm" onclick="act(\\'open_prep_pdf\\',{num:\\''+p.num+'\\'})">📄 Open prep pack</button>'+
+      (p.haspack?'<button class="sm" onclick="act(\\'open\\',{co:byNum(\\''+p.num+'\\').company})">📂 Open .md files</button>':'')+
       '<button class="sm p" onclick="openMock(\\''+p.num+'\\')">🎤 Rehearse here</button>'+
       '<button class="sm" onclick="act(\\'mock\\',{num:\\''+p.num+'\\'})">🎙 Voice (Terminal)</button>'+
-      (stageOf(p.status)==='evaluated'?'<button class="sm" onclick="act(\\'apply\\',{num:\\''+p.num+'\\'})">✓ Mark applied</button>':'')+
-    '</div>'+
-    '<div class="actions" style="margin-top:8px">'+
+    '</div><div class="sm muted" style="margin-top:6px">Prep pack = JD-specific questions + model answers, a leadership brief, and a stack/articles guide — all grounded in your CV.</div></div>'+
+    '<div class="sec"><div class="h">Update stage</div><div class="actions">'+
+      (stageOf(p.status)==='evaluated'?'<button class="sm p" onclick="act(\\'apply\\',{num:\\''+p.num+'\\'})">✓ Mark applied</button>':'')+
       '<button class="sm" title="Posting closed / cancelled / no longer available" onclick="if(confirm(\\'Discard '+esc(p.company)+'? (posting closed / not available) — it drops off the active board.\\'))act(\\'discard\\',{num:\\''+p.num+'\\'})">🗑 Discard (not available)</button>'+
       '<button class="sm" title="Rejected by the company" onclick="if(confirm(\\'Mark '+esc(p.company)+' Rejected? It drops off the active board.\\'))act(\\'reject\\',{num:\\''+p.num+'\\'})">✗ Rejected</button>'+
     '</div></div>'+
@@ -1037,13 +1250,26 @@ async function saveSetup(){
 
 /* ---------- actions ---------- */
 var _busy={};
+var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs'};
+var _longActive=null;   // only ONE long generation at a time — no overlapping tickers, no server overload
 async function act(kind,args){
   if(_busy[kind]){toast('Still working on that — one moment…');return}
-  _busy[kind]=true; setTimeout(function(){_busy[kind]=false},4000);
-  toast('<span class="spin"></span>Working…',true);
-  try{var r=await (await fetch('/api/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args||{})})).json();toast(r.msg);}
-  catch(e){toast('Action failed.');_busy[kind]=false;return}
-  setTimeout(load,500);}  // _busy clears on the 4s timer above — covers the mock process-startup window
+  if(_LONG[kind]&&_longActive){toast('⏳ '+_LONG[_longActive]+' is still running — let it finish first.');return}
+  _busy[kind]=true;
+  var tick=null;
+  if(_LONG[kind]){
+    _longActive=kind;
+    var t0=Date.now();
+    var paint=function(){var s=Math.round((Date.now()-t0)/1000);toast('<span class="spin"></span>'+_LONG[kind]+'… '+s+'s'+(kind==='open_prep_pdf'?'':' (usually 30–60s)'),true);};
+    paint(); tick=setInterval(paint,1000);
+  } else { toast('<span class="spin"></span>Working…',true); }
+  try{
+    var r=await (await fetch('/api/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args||{})})).json();
+    if(tick)clearInterval(tick);
+    toast(r.msg||'Done.');
+  }catch(e){ if(tick)clearInterval(tick); toast('Action failed — try again.'); }
+  finally{ _busy[kind]=false; if(_longActive===kind)_longActive=null; }
+  setTimeout(load,500);}  // lock held for the whole call so a second click can't fire a duplicate LLM request
 async function doScan(){
   if(_busy['scan']){toast('A scan is already running — one moment…');return}
   _busy['scan']=true;
@@ -1102,6 +1328,9 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/open_resume": self._send(200,json.dumps(do_open_resume(args.get("num"))))
         elif p=="/api/questions": self._send(200,json.dumps(do_questions(args.get("num"))))
         elif p=="/api/questions_all": self._send(200,json.dumps(do_questions_all()))
+        elif p=="/api/preppack": self._send(200,json.dumps(do_preppack(args.get("num"))))
+        elif p=="/api/preppack_selected": self._send(200,json.dumps(do_preppack_selected()))
+        elif p=="/api/open_prep_pdf": self._send(200,json.dumps(do_open_prep_pdf(args.get("num"))))
         elif p=="/api/brief": self._send(200,json.dumps(do_brief(args.get("co",""))))
         elif p=="/api/mock_start":  self._send(200,json.dumps(do_mock_start(args.get("num"))))
         elif p=="/api/mock_reply":  self._send(200,json.dumps(do_mock_reply(args.get("num"),args.get("history",[]))))

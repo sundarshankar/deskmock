@@ -16,7 +16,7 @@ Kanban board  →  drill into a role  →  prep readiness + gaps
 - **In-app rehearse** — a full mock interview in the browser: questions read aloud (browser TTS), you type or dictate, feedback + scorecard, saved as a transcript. No Terminal, no extra tooling.
 - **Discover** — turns the scan firehose into a ranked shortlist of relevant, recent, in-location roles. Coverage spans **ATS at the source** (Greenhouse, Lever, Ashby, Workday, iCIMS — via career-ops) **plus the consumer aggregators** (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google — via [JobSpy](https://github.com/speedyapply/JobSpy), when its venv is set up) and niche remote boards. The 🔎 Scan button runs both. See the [roadmap](../ROADMAP.md) for the full 360° vision.
 - **Draft replies** — draft recruiter/HM responses in your voice with your contact details; flags spam; never auto-sends
-- **Company briefs & question sets** — generated from the role + your CV, for prep
+- **Prep packs** — per role, a JD-specific set of **interview questions + model answers**, a **leadership brief**, and a **stack/articles guide**, all grounded in your CV and combined into one printable doc. Company briefs too. A metric-trace check flags any number in the pack that isn't in your CV, so you never rehearse an inflated figure.
 - **Next best actions** — follow-ups due, prep gaps, warm-path reminders, at a glance
 
 Everything that calls an LLM (drafts, briefs, question sets, in-app rehearse) uses **any OpenAI-compatible endpoint** on your own key.
