@@ -612,17 +612,20 @@ def _gen_questions_for(a):
 def do_questions(num):
     a=next((x for x in apps() if x["num"]==str(num)),None)
     if not a: return dict(ok=False,msg="Role not found.")
-    ok,info=_gen_questions_for(a)
-    return dict(ok=ok, msg=(f"Generated {info} ✓ — rehearse in DeskMock." if ok else f"Failed: {info}"))
+    rt=_gen_qset_for(a,"technical"); rb=_gen_qset_for(a,"behavioral")
+    ok = rt[0] or rb[0]
+    got=[lbl for r,lbl in ((rt,"technical"),(rb,"behavioral")) if r[0]]
+    if not ok: return dict(ok=False, msg=f"Failed: {rt[1]}")
+    return dict(ok=True, msg="Generated "+" + ".join(got)+" Q&A ✓ — rehearse in DeskMock.")
 
 def do_questions_all():
     done=0; fail=0
     targets=[a for a in apps() if a["status"].lower() in ("applied","interview","responded")
-             and not next((f for f in prep_files if slug(a["company"]) in slug(f) and "question" in f.lower()),"")]
+             and not next((f for f in prep_files if slug(a["company"]) in slug(f) and "technical" in f.lower()),"")]
     for a in targets:
-        ok,_=_gen_questions_for(a);
-        done+=1 if ok else 0; fail+=0 if ok else 1
-    return dict(ok=True, msg=f"Generated question sets for {done} applied role(s)" + (f"; {fail} failed" if fail else "") + ".")
+        rt=_gen_qset_for(a,"technical"); rb=_gen_qset_for(a,"behavioral")
+        done+=1 if (rt[0] or rb[0]) else 0; fail+=0 if (rt[0] or rb[0]) else 1
+    return dict(ok=True, msg=f"Generated technical + behavioral Q&A for {done} applied role(s)" + (f"; {fail} failed" if fail else "") + ".")
 
 # curated open-source prep resources by dimension (mirrors ../PREP-RESOURCES.md)
 CURATED={
@@ -756,11 +759,52 @@ _PREP_CSS=("<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
   "border-radius:3px;font-size:12px}hr{border:none;border-top:1px solid #ddd;margin:18px 0}em{color:#444}"
   ".pgbreak{page-break-before:always}</style>")
 
+# ---- prep dimensions: attack each interview round separately ----
+PREP_DIMS=[("leadership","🎯 Leadership"),("technical","🛠 Technical"),("behavioral","💬 Behavioral"),("articles","📰 Stack & Articles")]
+_QSET={
+ "behavioral":("Behavioral (STAR)",
+   "Generate 6 behavioral questions a senior-leadership panel asks — leading through change, conflict/disagreement, "
+   "failure and what you learned, influencing without authority, hiring and growing people, delivering under "
+   "constraint. Answer EACH in STAR (Situation, Task, Action, Result), first person.",
+   ("behavioral",)),
+ "technical":("Technical",
+   "Generate 7 technical questions from the JD's named stack and this role's domain (architecture at scale, "
+   "reliability/SRE, cloud & Kubernetes, IaC/CI-CD, observability, cost/FinOps, incident/DR). Answer EACH with a "
+   "structured, specific technical explanation grounded in the candidate's real experience.",
+   ("technical","system")),
+}
+def _gen_qset_for(a, dim):
+    company,role=a["company"],a["role"]; key=load_key()
+    if not key: return (False,"no key")
+    label,brief,rescats=_QSET[dim]
+    cv=read(CO/"cv.md")[:3500]; jd,jdsrc=_jd_text_for(a)
+    sys=(f"Build a focused {label} interview-prep set for a SPECIFIC job posting, grounded in the candidate's real CV. "
+         + ("Target THIS posting's stack, responsibilities, and must-haves. " if jd else "Target the role title and seniority. ")
+         + brief + " For EACH question provide: **Question**; **Model answer** (ready-to-review, candidate's first-person "
+         "voice, grounded ONLY in the CV; plain-ASCII, no smart quotes/em-dashes); **Power phrases** (2 reusable lines). "
+         + _ATTR_RULE + "Where a number/example would help but is NOT in the CV, insert [add your metric]/[add a specific "
+         "example] — never invent. First person throughout; no candidate-name line or [PERSON_NAME] placeholder.")
+    # real questions this company already asked (from past debriefs) — prioritize preparing them
+    real=[q for d,q in question_bank_for(company) if d.lower().startswith(dim[:4])]
+    realblk=("\n\nREAL questions already asked at "+company+" (from a past interview — PREPARE THESE FIRST, then add "
+             "others):\n"+"\n".join("- "+q for q in real[:8])) if real else ""
+    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION (target the questions to THIS posting):\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth):\n{cv}{realblk}\n\nProduce the {label} set."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2800)
+    except Exception as e: return (False,str(e))
+    md=re.sub(r'^[*\s>_-]*Candidate:\s*\[[^\]]*\]\s*$','',md,flags=re.I|re.M)
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    tag=f"tailored to the {jdsrc}" if jd else "role-level (no JD on file)"
+    if real: tag+=f" · includes {len(real)} real asked-question(s)"
+    out=CO/"interview-prep"/f"{slug(company)}-{dim}.md"
+    out.write_text(f"# {label} prep — {role} @ {company}\n_(model answers, {tag}, grounded in your CV. Personalize [brackets], rehearse in DeskMock.)_\n\n{md}\n\n## Curated {label} resources\n{_reslinks(*rescats)}\n")
+    prep_files.append(out.name)
+    return (True,out.name)
+
 def _make_prep_pack_file(company, role):
     # Combine the three prep .md files into one document. Always produce HTML (no deps);
     # render a clean PDF too IF career-ops' generate-pdf.mjs is available (Playwright).
     parts=[]
-    for s in ("questions","leadership","articles"):
+    for s,_l in PREP_DIMS:
         f=CO/"interview-prep"/f"{slug(company)}-{s}.md"
         if f.exists() and read(f).strip():
             cls=' class="pgbreak"' if parts else ''
@@ -781,16 +825,18 @@ def do_preppack(num):
     a=next((x for x in apps() if x["num"]==str(num)),None)
     if not a: return dict(ok=False,msg="Role not found.")
     r={}
-    r["questions"]=_gen_questions_for(a)
     r["leadership"]=_gen_leadership_for(a)
+    r["technical"]=_gen_qset_for(a,"technical")
+    r["behavioral"]=_gen_qset_for(a,"behavioral")
     r["articles"]=_gen_articles_for(a)
     ok=all(v[0] for v in r.values())
     jd,jdsrc=_jd_text_for(a)
-    parts=[("questions","interview questions"),("leadership","leadership pack"),("articles","stack & articles")]
+    LBL={"leadership":"leadership","technical":"technical Q&A","behavioral":"behavioral Q&A","articles":"stack & articles"}
+    parts=[(k,LBL[k]) for k in ("leadership","technical","behavioral","articles")]
     got=[label for k,label in parts if r[k][0]]
     fail=[f"{label}: {r[k][1]}" for k,label in parts if not r[k][0]]
     cv=read(CO/"cv.md")
-    blob="\n".join(read(CO/"interview-prep"/f"{slug(a['company'])}-{s}.md") for s in ("questions","leadership","articles"))
+    blob="\n".join(read(CO/"interview-prep"/f"{slug(a['company'])}-{s}.md") for s,_ in PREP_DIMS)
     untraced=_untraced_metrics(blob, cv)
     pdfok,_pth,pdfinfo=_make_prep_pack_file(a["company"],a["role"])
     tag = f" (JD-tailored via {jdsrc})" if jd else " (role-level — no JD on file)"
@@ -808,13 +854,23 @@ def do_open_prep_pdf(num):
     pdf=CO/"interview-prep"/f"{sc}-prep-pack.pdf"; htmlf=CO/"interview-prep"/f"{sc}-prep.html"
     target = pdf if pdf.exists() else (htmlf if htmlf.exists() else None)
     if target is None:
-        if not any((CO/"interview-prep"/f"{sc}-{s}.md").exists() for s in ("questions","leadership","articles")):
+        if not any((CO/"interview-prep"/f"{sc}-{s}.md").exists() for s,_l in PREP_DIMS):
             return dict(ok=False,msg="No prep pack yet — click 'Generate prep pack' first.")
         ok,target,info=_make_prep_pack_file(a["company"],a["role"])
         if not ok: return dict(ok=False,msg=f"Could not build prep doc: {info}")
     try: subprocess.Popen(["open", str(target)])
     except Exception as e: return dict(ok=False,msg=str(e))
     return dict(ok=True,msg=f"Opened {target.name}")
+
+
+def do_open_dimension(num, dim):
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False,msg="Role not found.")
+    if dim not in dict(PREP_DIMS): return dict(ok=False,msg="Unknown prep dimension.")
+    company=a["company"]; md=CO/"interview-prep"/f"{slug(company)}-{dim}.md"
+    if not md.exists() or not read(md).strip():
+        return dict(ok=False,msg=f"No {dict(PREP_DIMS)[dim]} prep yet — click 'Generate prep pack' first.")
+    return dict(ok=True,msg=f"Opened {_render_open(md, f'{slug(company)}-{dim}')}")
 
 def do_preppack_selected():
     dead={"rejected","discarded","skip","hired"}
@@ -1411,14 +1467,20 @@ function renderDrawer(p){
       '<details style="margin-top:7px"><summary class="sm" style="cursor:pointer">Copy field pack (works on any ATS)</summary><pre class="fieldpack">'+fieldPack()+'</pre></details>'+
     '</div>'+
     '<div class="sec"><div class="h">📚 Interview prep</div><div class="actions">'+
-      '<button class="sm p" onclick="if(confirm(\\'Generate the full prep pack (JD questions + model answers, leadership brief, stack/articles) for '+esc(p.company)+'? ~60s\\'))act(\\'preppack\\',{num:\\''+p.num+'\\'})">📚 Generate prep pack</button>'+
-      '<button class="sm" onclick="act(\\'questions\\',{num:\\''+p.num+'\\'})">🧠 Questions only</button>'+
-      '<button class="sm" onclick="act(\\'open_prep_pdf\\',{num:\\''+p.num+'\\'})">📄 Open prep pack</button>'+
-      (p.haspack?'<button class="sm" onclick="act(\\'open\\',{co:byNum(\\''+p.num+'\\').company})">📂 Open .md files</button>':'')+
+      '<button class="sm p" onclick="if(confirm(\\'Generate the full prep pack (Leadership + Technical + Behavioral + Articles, JD-tailored) for '+esc(p.company)+'? ~90s\\'))act(\\'preppack\\',{num:\\''+p.num+'\\'})">📚 Generate prep pack</button>'+
+      '<button class="sm" onclick="act(\\'open_prep_pdf\\',{num:\\''+p.num+'\\'})">📄 Full pack</button>'+
+      (p.haspack?'<button class="sm" onclick="act(\\'open\\',{co:byNum(\\''+p.num+'\\').company})">📂 .md files</button>':'')+
+    '</div>'+
+    '<div class="sm muted" style="margin:8px 0 4px">Attack each round on its own:</div><div class="actions">'+
+      '<button class="sm" onclick="dim(\\''+p.num+'\\',\\'leadership\\')">🎯 Leadership</button>'+
+      '<button class="sm" onclick="dim(\\''+p.num+'\\',\\'technical\\')">🛠 Technical</button>'+
+      '<button class="sm" onclick="dim(\\''+p.num+'\\',\\'behavioral\\')">💬 Behavioral</button>'+
+      '<button class="sm" onclick="dim(\\''+p.num+'\\',\\'articles\\')">📰 Articles</button>'+
+    '</div><div class="actions" style="margin-top:8px">'+
       '<button class="sm p" onclick="openMock(\\''+p.num+'\\')">🎤 Rehearse here</button>'+
       '<button class="sm" onclick="act(\\'mock\\',{num:\\''+p.num+'\\'})">🎙 Voice (Terminal)</button>'+
       '<button class="sm" title="Comp benchmark + leverage + scripts" onclick="if(confirm(\\'Generate salary-negotiation prep for '+esc(p.company)+'? Comp figures are estimates to verify. ~40s\\'))act(\\'negotiation\\',{num:\\''+p.num+'\\'})">💰 Negotiation prep</button>'+
-    '</div><div class="sm muted" style="margin-top:6px">Prep pack = JD-specific questions + model answers, a leadership brief, and a stack/articles guide — all grounded in your CV.</div></div>'+
+    '</div><div class="sm muted" style="margin-top:6px">Each dimension is JD-tailored + CV-grounded — leadership brief, technical Q&amp;A, behavioral STAR, and a stack/articles reading guide.</div></div>'+
     '<div class="sec"><div class="h">Update stage</div><div class="actions">'+
       (stageOf(p.status)==='evaluated'?'<button class="sm p" onclick="act(\\'apply\\',{num:\\''+p.num+'\\'})">✓ Mark applied</button>':'')+
       '<button class="sm" title="Posting closed / cancelled / no longer available" onclick="if(confirm(\\'Discard '+esc(p.company)+'? (posting closed / not available) — it drops off the active board.\\'))act(\\'discard\\',{num:\\''+p.num+'\\'})">🗑 Discard (not available)</button>'+
@@ -1534,7 +1596,8 @@ async function saveSetup(){
 
 /* ---------- actions ---------- */
 var _busy={};
-var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank',drill:'Building your escalated drill',flashcards:'Building flashcards',negotiation:'Building negotiation prep',debrief:'Saving debrief + extracting questions'};
+function dim(num,d){ act('open_dimension',{num:num,dim:d}); }
+var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',open_dimension:'Opening dimension',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank',drill:'Building your escalated drill',flashcards:'Building flashcards',negotiation:'Building negotiation prep',debrief:'Saving debrief + extracting questions'};
 var _longActive=null;   // only ONE long generation at a time — no overlapping tickers, no server overload
 async function act(kind,args){
   if(_busy[kind]){toast('Still working on that — one moment…');return}
@@ -1673,6 +1736,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/flashcards": self._send(200,json.dumps(do_flashcards()))
         elif p=="/api/drill": self._send(200,json.dumps(do_drill(args.get("dim",""))))
         elif p=="/api/open_prep_pdf": self._send(200,json.dumps(do_open_prep_pdf(args.get("num"))))
+        elif p=="/api/open_dimension": self._send(200,json.dumps(do_open_dimension(args.get("num"),args.get("dim",""))))
         elif p=="/api/brief": self._send(200,json.dumps(do_brief(args.get("co",""))))
         elif p=="/api/mock_start":  self._send(200,json.dumps(do_mock_start(args.get("num"))))
         elif p=="/api/mock_reply":  self._send(200,json.dumps(do_mock_reply(args.get("num"),args.get("history",[]))))
