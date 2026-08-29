@@ -672,7 +672,9 @@ def _gen_leadership_for(a):
          "## My leadership narrative\n3-4 first-person talking points that map the candidate's REAL experience to "
          "those themes (STAR-ish; use [add a specific example]/[add your metric] where the CV lacks a detail).\n"
          "## Likely leadership questions\n5-6 questions with a one-line angle each on how to answer from the CV.")
-    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth):\n{cv}\n\nProduce the leadership brief."
+    real=[q for d,q in question_bank_for(company) if d.lower().startswith("lead")]
+    realblk=("\n\nREAL leadership questions already asked at "+company+" (prepare these):\n"+"\n".join("- "+q for q in real[:6])) if real else ""
+    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth):\n{cv}{realblk}\n\nProduce the leadership brief."
     try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2600)
     except Exception as e: return (False,str(e))
     md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
@@ -1035,12 +1037,16 @@ def do_flashcards():
     except Exception as e:
         return dict(ok=False,msg=f"Failed: {e}")
     # tag ids + scrub
-    clean=[]
-    for i,c in enumerate(cards):
-        if not (c.get("front") and c.get("back")): continue
-        c["id"]=f"c{i}"; c["dim"]=c.get("dim","fact")
-        for k in ("front","back"): c[k]=re.sub(r'\[(?:person[_ ]?name|your[_ ]?name|name)\]','',str(c[k]),flags=re.I).strip()
-        clean.append({"id":c["id"],"front":c["front"],"back":c["back"],"dim":c["dim"]})
+    import hashlib
+    clean=[]; seen=set()
+    for c in cards:
+        if not (isinstance(c,dict) and c.get("front") and c.get("back")): continue
+        front=re.sub(r'\[(?:person[_ ]?name|your[_ ]?name|name)\]','',str(c["front"]),flags=re.I).strip()
+        back=re.sub(r'\[(?:person[_ ]?name|your[_ ]?name|name)\]','',str(c["back"]),flags=re.I).strip()
+        cid="c"+hashlib.md5(front.lower().encode()).hexdigest()[:10]
+        if cid in seen: continue
+        seen.add(cid)
+        clean.append({"id":cid,"front":front,"back":back,"dim":c.get("dim","fact")})
     if not clean: return dict(ok=False,msg="No cards generated — try again.")
     (CO/"interview-prep"/"flashcards.json").write_text(json.dumps(clean,indent=1))
     untraced=_untraced_metrics(" ".join(c["back"] for c in clean if c["dim"]=="fact"), read(CO/"cv.md"))
