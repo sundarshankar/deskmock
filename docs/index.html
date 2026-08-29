@@ -275,7 +275,13 @@ python3 jobhelm/mission-control.py
 <span class="c"># DeskMock — rehearse out loud (type or dictate; /done for your scorecard)</span>
 python3 deskmock.py --clipboard</div>
 
-  <p class="lead" style="font-size:15px">Both run out of the box on the bundled samples, so they work the moment you clone. Point them at your own CV / job search when you're ready — see the docs. For DeskMock voice (read-aloud + hands-free dictation), add <code>--speak</code>.</p>
+  <p class="step"><span class="num">🪟</span> On <strong>Windows</strong>? Same steps, PowerShell syntax — set the key with <code>$env:</code> and run with <code>python</code>:</p>
+  <div class="codeblock"><span class="c"># PowerShell (Windows)</span>
+<span class="k">$env:</span>OPENROUTER_API_KEY=<span class="s">"sk-or-your-key-here"</span>
+python jobhelm\mission-control.py</div>
+
+  <p class="lead" style="font-size:15px">Both run out of the box on the bundled samples (macOS, Windows, and Linux), so they work the moment you clone. Point them at your own CV / job search when you're ready — see the docs. For DeskMock's read-aloud voice + hands-free dictation, add <code>--speak</code> (macOS; on Windows/Linux you type your answers).</p>
+  <p class="lead" style="font-size:14px">Run it <strong>free</strong> on Google's Gemini tier instead of OpenRouter: <code>$env:JOBHELM_API_KEY="…"</code>, <code>$env:JOBHELM_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai"</code>, <code>$env:JOBHELM_MODEL="gemini-2.5-flash"</code> (use <code>export</code> on macOS/Linux). A free <a href="https://aistudio.google.com" target="_blank" rel="noopener">AI Studio</a> key is enough.</p>
   <div class="cta" style="justify-content:flex-start;margin-top:22px">
     <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm#readme" class="btn p">JobHelm docs &amp; setup</a>
     <a href="https://github.com/sundarshankar/deskmock#setup" class="btn">DeskMock voice guide</a>
