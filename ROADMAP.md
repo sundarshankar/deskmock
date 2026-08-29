@@ -8,6 +8,36 @@ journey, not just one slice:
 
 Everything stays local-first and on your own API key. No cloud lock-in, no telemetry.
 
+## How the tools map to the journey
+
+It's a **loop, not a line** — `prepare` is where the learning stack lives, and both the interview
+rehearsal and the post-interview debrief feed back into it, so every round makes the next one sharper.
+
+```
+scan ─→ match ─→ apply ─→ connect ─→ PREPARE ─→ interview ─→ negotiate ─→ land
+                                        │            │
+                                        │            └──(debrief)──┐
+                                        └──────────◄───────────────┘
+```
+
+| Stage | Tool |
+|---|---|
+| **scan** | 🔎 Scan — ATS sweep (Greenhouse/Lever/Ashby/Workday/iCIMS) + JobSpy (LinkedIn/Indeed/…) |
+| **match** | Discover — fit score, dedupe, ranked |
+| **apply** | Select → **Tailor résumé** (fabrication + AI-tell + metadata gates) → assisted apply → archive-on-apply |
+| **connect** | Warm-path outreach drafts (review before you send) |
+| **prepare** | **Prep pack** (Leadership · Technical · Behavioral · Articles) + **Story Bank** + **Flashcards** (SM-2 spaced repetition) + **Drill weakest** |
+| **interview** | DeskMock rehearsal → scored per dimension → **Readiness** chart |
+| **negotiate** | **Negotiation prep** — comp benchmark (verify), leverage, scripts, scenarios |
+| **land** | offer accepted |
+
+**The feedback loops (what makes it compound):**
+- **interview → prepare:** the 📝 **debrief** captures the real questions asked → question bank → future `prepare` for that company prioritizes them.
+- **rehearse → drill:** each DeskMock score updates **Readiness** → **Drill weakest** generates escalated questions for your gap → re-rehearse → score rises.
+
+Every claim in every artifact is grounded in your real CV (metric-trace gates throughout) — the loop
+makes you sharper, never less truthful.
+
 ## The pillars
 
 ### 1. Find every matching role (widest possible net)
