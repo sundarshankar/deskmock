@@ -649,6 +649,14 @@ def _reslinks(*cats):
         for n,d in CURATED.get(c,[]): out.append(f"- [{n}](https://github.com/{n}) — {d}")
     return "\n".join(out)
 
+_TECHWORDS=re.compile(r'\b(software|platform|cloud|kubernetes|devops|sre|infrastructure|infra|engineer|backend|'
+    r'front[- ]?end|data\s*(engineer|scien)|machine\s*learning|\bml\b|\bai\b|api|micro[- ]?service|terraform|'
+    r'ci/?cd|observability|architect|sysadmin|network|security engineer|developer)\b', re.I)
+def _looks_tech(*texts):
+    return bool(_TECHWORDS.search(" ".join(t or "" for t in texts)))
+def _res_section(label, cats, tech):
+    return (f"\n\n## Curated {label} resources\n{_reslinks(*cats)}\n") if (tech and _reslinks(*cats)) else ""
+
 def _untraced_metrics(md, cv):
     cvn=re.sub(r'[,\s]','',cv.lower())
     bad=[]
@@ -667,7 +675,9 @@ def _gen_leadership_for(a):
     key=load_key()
     if not key: return (False,"no key")
     cv=read(CO/"cv.md")[:3000]; jd,jdsrc=_jd_text_for(a)
-    sys=("Create a LEADERSHIP round prep brief for a senior platform/cloud/infrastructure leader (Director/VP/Head). "
+    sys=("Create a LEADERSHIP round prep brief for THIS role. Infer the candidate's field and seniority from the CV "
+         "and JD (e.g. finance, marketing, healthcare, software, operations; IC vs manager vs director/VP) and pitch "
+         "the brief at that level and field — do not assume it is a tech/platform role unless the CV/JD says so. "
          "Grounded ONLY in the candidate's real CV; never invent facts, metrics, employers, or teams. "+_ATTR_RULE+
          "Plain-ASCII, first person, no name or [PERSON_NAME] placeholder. Markdown with these sections:\n"
          + ("Tailor to the JD below — reference the org scope, team size, and challenges it names.\n" if jd else "")
@@ -684,7 +694,7 @@ def _gen_leadership_for(a):
     except Exception as e: return (False,str(e))
     md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
     out=CO/"interview-prep"/f"{slug(company)}-leadership.md"
-    out.write_text(f"# Leadership prep — {role} @ {company}\n_(grounded in your CV; personalize the [brackets]. {'Tailored to '+jdsrc if jd else 'role-level'}.)_\n\n{md}\n\n## Curated leadership & behavioral resources\n{_reslinks('leadership','behavioral')}\n")
+    out.write_text(f"# Leadership prep — {role} @ {company}\n_(grounded in your CV; personalize the [brackets]. {'Tailored to '+jdsrc if jd else 'role-level'}.)_\n\n{md}"+_res_section("leadership & behavioral", ("leadership","behavioral"), _looks_tech(cv, jd)))
     prep_files.append(out.name)
     return (True,out.name)
 
@@ -692,26 +702,28 @@ def _gen_articles_for(a):
     company,role=a["company"],a["role"]
     key=load_key()
     if not key: return (False,"no key")
-    jd,jdsrc=_jd_text_for(a)
+    jd,jdsrc=_jd_text_for(a); cv=read(CO/"cv.md")[:2500]   # CV drives the industry/field inference, not just the JD
     web=os.environ.get("JOBHELM_WEB","1")!="0"   # live article fetch via OpenRouter web search (set 0 to disable)
     if web:
-        sys=("You build a STACK READING GUIDE so a candidate sounds current in a technical interview. Use the WEB "
-             "SEARCH RESULTS available to you to find REAL, RECENT articles. From the role (and JD if given), pick "
-             "the 5-7 key technologies/practices that matter (Kubernetes, IaC/Terraform, service mesh, observability/"
-             "SRE, FinOps, CI/CD, platform engineering, AI infra). For EACH: **what to be current on** (one line), "
-             "**why it matters for THIS role** (one line), and **1-2 recent articles** as markdown links "
-             "[title](url). Cite ONLY genuine technical sources — engineering blogs, project docs, conference "
-             "talks, or news ABOUT THE TECHNOLOGY. NEVER cite a job listing, recruiting site, or a company "
-             "careers/greenhouse/lever page — those are not articles; discard them. Use only real URLs the search "
-             "returned; if you found no genuine technical article for a topic, write 'Search: <query>' instead of "
-             "inventing a link. Never fabricate a URL, headline, or date. Plain-ASCII, no name placeholder.")
+        sys=("You build a READING GUIDE so a candidate sounds current in their interview. Use the WEB SEARCH RESULTS "
+             "available to you to find REAL, RECENT articles. FIRST infer the candidate's FIELD from the CV and JD "
+             "(finance, marketing, healthcare, software, operations, etc.); THEN pick the 5-7 topics/practices that "
+             "matter in THAT field for THIS role (finance -> markets, rates, regulation, FP&A tooling, valuation "
+             "trends; marketing -> channels, analytics, attribution; software -> the named stack). For EACH: **what to "
+             "be current on** (one line), **why it matters for THIS role** (one line), and **1-2 recent articles** as "
+             "markdown links [title](url). Cite ONLY genuine sources — industry publications, expert blogs, docs, or "
+             "news ABOUT THE TOPIC. NEVER cite a job listing, recruiting site, or a company careers/greenhouse/lever "
+             "page — discard those. Use only real URLs the search returned; if none found for a topic, write "
+             "'Search: <query>' instead of inventing a link. Never fabricate a URL, headline, or date. Plain-ASCII, "
+             "no name placeholder.")
     else:
-        sys=("You build a STACK READING GUIDE so a candidate sounds current in a technical interview. "
-             "From the role (and JD if given), identify the 5-7 key technologies/practices that matter. For EACH: "
-             "**what to be current on** (one line) and **why it matters for THIS role** (one line). Then a short "
+        sys=("You build a READING GUIDE so a candidate sounds current in their interview. Infer the candidate's FIELD "
+             "from the CV and JD, then identify the 5-7 topics/practices that matter in THAT field for THIS role. For "
+             "EACH: **what to be current on** (one line) and **why it matters for THIS role** (one line). Then a short "
              "**'go deeper'** list of search queries to run for THIS WEEK's articles (do NOT fabricate headlines, "
              "dates, or URLs — give the search query instead). Plain-ASCII, no name placeholder.")
-    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+"Produce the stack reading guide with recent real articles."
+    usr=(f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")
+         +f"CANDIDATE CV (infer the candidate's industry/field from this):\n{cv}\n\nProduce the reading guide with recent real articles for the candidate's field.")
     try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2400,web=web)
     except Exception:
         try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2200)  # fall back w/o web
@@ -719,7 +731,7 @@ def _gen_articles_for(a):
     md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
     out=CO/"interview-prep"/f"{slug(company)}-articles.md"
     sub="recent real articles fetched live" if web else "run the search queries for this week's writing"
-    out.write_text(f"# Stack & articles — {role} @ {company}\n_(key topics to be current on{' from '+jdsrc if jd else ''}; {sub}.)_\n\n{md}\n\n## Curated technical, SRE & system-design resources\n{_reslinks('technical','system')}\n")
+    out.write_text(f"# Industry & articles — {role} @ {company}\n_(key topics to be current on{' from '+jdsrc if jd else ''}; {sub}.)_\n\n{md}"+_res_section("technical, SRE & system-design", ("technical","system"), _looks_tech(role, jd, cv)))
     prep_files.append(out.name)
     return (True,out.name)
 
@@ -765,14 +777,19 @@ _PREP_CSS=("<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 PREP_DIMS=[("leadership","🎯 Leadership"),("technical","🛠 Technical"),("behavioral","💬 Behavioral"),("articles","📰 Stack & Articles")]
 _QSET={
  "behavioral":("Behavioral (STAR)",
-   "Generate 6 behavioral questions a senior-leadership panel asks — leading through change, conflict/disagreement, "
-   "failure and what you learned, influencing without authority, hiring and growing people, delivering under "
-   "constraint. Answer EACH in STAR (Situation, Task, Action, Result), first person.",
+   "Generate 6 behavioral questions an interview panel asks for THIS role and seniority — driving change, conflict or "
+   "disagreement, failure and what you learned, influencing others, collaboration, and delivering under pressure. "
+   "Answer EACH in STAR (Situation, Task, Action, Result), first person.",
    ("behavioral",)),
- "technical":("Technical",
-   "Generate 7 technical questions from the JD's named stack and this role's domain (architecture at scale, "
-   "reliability/SRE, cloud & Kubernetes, IaC/CI-CD, observability, cost/FinOps, incident/DR). Answer EACH with a "
-   "structured, specific technical explanation grounded in the candidate's real experience.",
+ "technical":("Domain / Technical",
+   "FIRST infer the candidate's FIELD from the CV and the JD (e.g. software/platform, finance, accounting, marketing, "
+   "sales, healthcare/clinical, operations, HR, data, legal). THEN generate 7 questions that test the CORE KNOWLEDGE "
+   "and skills of THAT field for THIS role — the questions a hiring manager IN THAT FIELD would actually ask. "
+   "Examples: finance -> modeling, valuation, FP&A, GAAP/IFRS, controls, forecasting, ERP systems; "
+   "clinical -> protocols, patient safety, evidence-based practice; marketing -> strategy, analytics, channels, "
+   "campaigns; sales -> pipeline, methodology, quota; software -> architecture, reliability, the named stack. "
+   "Do NOT default to software/infra unless the field actually is that. Answer EACH with a structured, specific "
+   "explanation grounded in the candidate's real experience.",
    ("technical","system")),
 }
 def _gen_qset_for(a, dim):
@@ -798,7 +815,7 @@ def _gen_qset_for(a, dim):
     tag=f"tailored to the {jdsrc}" if jd else "role-level (no JD on file)"
     if real: tag+=f" · includes {len(real)} real asked-question(s)"
     out=CO/"interview-prep"/f"{slug(company)}-{dim}.md"
-    out.write_text(f"# {label} prep — {role} @ {company}\n_(model answers, {tag}, grounded in your CV. Personalize [brackets], rehearse in DeskMock.)_\n\n{md}\n\n## Curated {label} resources\n{_reslinks(*rescats)}\n")
+    out.write_text(f"# {label} prep — {role} @ {company}\n_(model answers, {tag}, grounded in your CV. Personalize [brackets], rehearse in DeskMock.)_\n\n{md}"+_res_section(label, rescats, _looks_tech(cv, jd)))
     prep_files.append(out.name)
     return (True,out.name)
 
@@ -1084,8 +1101,10 @@ def do_flashcards():
          "the EXACT figure (e.g. front 'eHealth data-center migration time & efficiency gain?' back '11 months, +38%').\n"
          "- ~7 behavioral-trigger cards (dim=behavioral): front is a behavioral question type, back names the best "
          "story + a one-line STAR skeleton.\n"
-         "- ~7 technical-concept cards (dim=technical): front a concept/term central to the candidate's domain "
-         "(SRE, Kubernetes, FinOps, IaC, service mesh, incident mgmt), back a crisp 1-2 line explanation.\n"
+         "- ~7 domain-concept cards (dim=technical): FIRST infer the candidate's field from the CV, then front a "
+         "concept/term central to THAT field (finance: DCF, WACC, EBITDA, accruals; clinical: triage, evidence-based "
+         "practice; marketing: CAC, attribution, LTV; software: SRE, Kubernetes, IaC), back a crisp 1-2 line "
+         "explanation. Do NOT default to software terms unless the field is software.\n"
          "CRITICAL: never invent facts, metrics, employers, or projects — every 'fact' back must come from the CV. "
          "Keep fronts short (a prompt), backs tight (1-3 lines). Plain-ASCII, no [PERSON_NAME]. JSON only.")
     usr=f"Candidate CV (the ONLY source of truth):\n{cv}{sbtxt}\n\nProduce the flashcard JSON."
