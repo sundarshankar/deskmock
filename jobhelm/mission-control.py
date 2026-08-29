@@ -377,7 +377,8 @@ def do_mock(num=None, co=""):
         return dict(ok=False, msg=str(e))
 
 def load_key():
-    for v in (os.environ.get("OPENROUTER_API_KEY"), os.environ.get("OPENAI_API_KEY")):
+    # any OpenAI-compatible provider's key (OpenRouter default; JOBHELM_API_KEY for Gemini free tier, OpenAI, etc.)
+    for v in (os.environ.get("JOBHELM_API_KEY"), os.environ.get("OPENROUTER_API_KEY"), os.environ.get("OPENAI_API_KEY")):
         if v: return v.strip()
     for p in (CO/"openrouter.env", HERE/"openrouter.env"):
         if p.exists(): return p.read_text().strip()
@@ -545,13 +546,14 @@ def do_mock_finish(num, history):
     return dict(ok=True, scorecard=card, saved=saved)
 
 def _llm(msgs, key, max_tokens=900, model=None, json_mode=False, web=False):
-    payload={"model":(model or "deepseek/deepseek-v3.2"),"temperature":0.5,"max_tokens":max_tokens,"messages":msgs}
+    base=os.environ.get("JOBHELM_BASE_URL","https://openrouter.ai/api/v1").rstrip("/")  # any OpenAI-compatible API
+    payload={"model":(model or os.environ.get("JOBHELM_MODEL","deepseek/deepseek-v3.2")),"temperature":0.5,"max_tokens":max_tokens,"messages":msgs}
     if json_mode: payload["response_format"]={"type":"json_object"}
-    if web: payload["plugins"]=[{"id":"web","max_results":6}]
+    if web and "openrouter" in base: payload["plugins"]=[{"id":"web","max_results":6}]  # web search (OpenRouter only)
     body=json.dumps(payload).encode()
-    req=urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",data=body,
+    req=urllib.request.Request(base+"/chat/completions",data=body,
         headers={"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"JobHelm"})
-    with urllib.request.urlopen(req,timeout=90) as r:
+    with urllib.request.urlopen(req,timeout=120 if web else 90) as r:
         return json.load(r)["choices"][0]["message"]["content"].strip()
 
 # rehearsal-safety: every metric you'd say out loud must trace to your CV
