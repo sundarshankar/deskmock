@@ -25,6 +25,8 @@ Everything that calls an LLM (drafts, briefs, question sets, in-app rehearse) us
 
 JobHelm is a single Python script — **no dependencies to install** (standard library only). It ships inside the [DeskMock](https://github.com/sundarshankar/deskmock) repo as `jobhelm/`, so one clone gives you both tools.
 
+> **Cross-platform:** the board, prep, résumé tailoring, scan, and in-browser rehearse run on **macOS, Windows, and Linux** — "open file" buttons use the OS default app on each. The only macOS-only extras are DeskMock's read-aloud voice + hands-free dictation and the "Voice (Terminal)" launcher; on Windows/Linux you type your answers and rehearse in the browser. Works with **any OpenAI-compatible provider** (OpenRouter default; Gemini free tier, OpenAI, or a local model via `JOBHELM_BASE_URL`).
+
 > **Node** is only needed later, for the optional **Scan** and **Mark applied** actions (they shell out to career-ops `node` scripts) and for `clean-markers.mjs`. You don't need it to run the demo board or rehearse.
 
 **1. Get the code**
