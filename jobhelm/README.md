@@ -152,10 +152,14 @@ python3 jobhelm/test_mission_control.py      # runs against the bundled sample d
 
 ## Credits
 
-Built on and alongside two excellent local-first projects:
+Built on and alongside excellent local-first work:
 [career-ops](https://github.com/santifer/career-ops) (job-search automation) and
 [DeskMock](https://github.com/sundarshankar/deskmock) (local mock interviews).
-JobHelm doesn't fork or bundle their code — it's an independent dashboard that pairs with them.
+Integrates [JobSpy](https://github.com/speedyapply/JobSpy) (board aggregators) and
+[OpenRouter](https://openrouter.ai) / [DeepSeek](https://www.deepseek.com) for the LLM layer;
+[Playwright](https://playwright.dev) + [pdf-lib](https://github.com/Hopding/pdf-lib) for clean PDFs.
+Prep-resource links credit their maintainers — see [PREP-RESOURCES.md](../PREP-RESOURCES.md).
+JobHelm doesn't fork or bundle the inspiration projects' code — it's an independent dashboard that pairs with them.
 
 ## Disclaimer
 

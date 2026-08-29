@@ -142,11 +142,27 @@ a local-Whisper input backend, a `--jd-url` fetcher, and configurable scoring ru
 
 ## Credits & inspiration
 
-Built as a local-first alternative after working with two excellent projects — inspired by
-[career-ops](https://github.com/santifer/career-ops) (job-search automation) and
-[DeepInterview](https://github.com/ngoanpv/DeepInterview) (a full voice-avatar mock-interview stack),
-and pairs well with local dictation tools like [FluidVoice](https://github.com/extrudedawe-dev/fluidvoice).
-DeskMock does not fork or bundle their code; it's an independent tool with its own focus.
+DeskMock + JobHelm stand on a lot of excellent open-source work — thank you to all of it.
+
+**Inspiration**
+- [career-ops](https://github.com/santifer/career-ops) — job-search automation and the local pipeline JobHelm reads and drives
+- [DeepInterview](https://github.com/ngoanpv/DeepInterview) — a full voice-avatar mock-interview stack
+- Pairs well with local dictation like [FluidVoice](https://github.com/extrudedawe-dev/fluidvoice)
+
+**Integrates / builds on**
+- [JobSpy](https://github.com/speedyapply/JobSpy) — LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google scraping (the aggregator leg of 🔎 Scan)
+- [OpenRouter](https://openrouter.ai) — default LLM gateway (any OpenAI-compatible endpoint works); [DeepSeek](https://www.deepseek.com) is the default model, and OpenRouter's web plugin powers live article fetch
+- [Playwright](https://playwright.dev) — HTML→PDF rendering for résumés and prep docs
+- [pdf-lib](https://github.com/Hopding/pdf-lib) — metadata stripping in `clean-markers.mjs`
+
+**Curated interview-prep resources** — the prep hub points to community lists and guides (full set in [PREP-RESOURCES.md](PREP-RESOURCES.md)). Thanks to their maintainers, including
+[dastergon/awesome-sre](https://github.com/dastergon/awesome-sre),
+[donnemartin/system-design-primer](https://github.com/donnemartin/system-design-primer),
+[ashishps1/awesome-behavioral-interviews](https://github.com/ashishps1/awesome-behavioral-interviews),
+[kaushikb9/em-interviews](https://github.com/kaushikb9/em-interviews),
+[ronikobrosly/awesome-data-leadership](https://github.com/ronikobrosly/awesome-data-leadership), and others.
+
+DeskMock does not fork or bundle the inspiration projects' code — it's an independent tool. All trademarks and linked resources belong to their respective owners.
 
 ## Disclaimer
 
