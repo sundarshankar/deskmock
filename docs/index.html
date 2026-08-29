@@ -79,6 +79,8 @@ section .lead{color:var(--muted);font-size:17px;max-width:720px;margin:0 0 8px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:34px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
 .card .ic{font-size:24px;margin-bottom:10px}
+.diagram-wrap{overflow-x:auto;margin-top:16px;padding-bottom:4px}
+.journey-svg{min-width:660px;width:100%;height:auto;display:block}
 .card h3{font-size:17px;margin:0 0 7px}
 .card p{margin:0;color:var(--muted);font-size:14.5px}
 /* callout */
@@ -230,7 +232,44 @@ python3 jobhelm/mission-control.py</div>
 <section id="jobhelm"><div class="wrap">
   <p class="eyebrow">The command center</p>
   <h2>JobHelm — your whole search on one board.</h2>
-  <p class="lead">DeskMock rehearses you; <strong>JobHelm</strong> runs the search. In the <strong>same repo</strong>, it's a local dashboard for your entire pipeline — track every role, see honest prep-readiness, rehearse in-app, draft recruiter replies, and know the next best move. Same philosophy: your data, your machine, your key.</p>
+  <p class="lead">DeskMock rehearses you; <strong>JobHelm</strong> runs the search. In the <strong>same repo</strong>, it's a local dashboard for the <strong>entire journey</strong> — find matching roles across every board, tailor a truthful résumé per role, prepare across every interview dimension, rehearse, negotiate, and feed each debrief back into sharper prep. Same philosophy: your data, your machine, your key.</p>
+
+  <p class="eyebrow" style="margin-top:34px;color:var(--muted)">The whole journey — a loop, not a line</p>
+  <div class="diagram-wrap">
+  <svg viewBox="0 0 990 150" class="journey-svg" role="img" aria-label="The job-search journey: scan, match, apply, connect, prepare, interview, negotiate, land — with a debrief feedback loop from interview back to prepare, and a rehearse-to-drill loop inside prepare.">
+    <defs>
+      <marker id="jm" markerWidth="8" markerHeight="8" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--muted)"/></marker>
+      <marker id="jm2" markerWidth="9" markerHeight="9" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+    </defs>
+    <!-- debrief feedback arc: interview -> prepare -->
+    <path d="M 678 92 C 678 40, 556 40, 556 92" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#jm2)"/>
+    <text x="617" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent)">debrief → sharper prep</text>
+    <!-- connecting arrows -->
+    <g stroke="var(--muted)" stroke-width="1.6">
+      <line x1="118" y1="114" x2="134" y2="114" marker-end="url(#jm)"/>
+      <line x1="240" y1="114" x2="256" y2="114" marker-end="url(#jm)"/>
+      <line x1="362" y1="114" x2="378" y2="114" marker-end="url(#jm)"/>
+      <line x1="484" y1="114" x2="500" y2="114" marker-end="url(#jm)"/>
+      <line x1="606" y1="114" x2="622" y2="114" marker-end="url(#jm)"/>
+      <line x1="728" y1="114" x2="744" y2="114" marker-end="url(#jm)"/>
+      <line x1="850" y1="114" x2="866" y2="114" marker-end="url(#jm)"/>
+    </g>
+    <!-- nodes -->
+    <g font-size="13" text-anchor="middle">
+      <g transform="translate(18,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">scan</text></g>
+      <g transform="translate(140,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">match</text></g>
+      <g transform="translate(262,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">apply</text></g>
+      <g transform="translate(384,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">connect</text></g>
+      <g transform="translate(506,92)"><rect width="100" height="44" rx="10" fill="var(--accent)" stroke="var(--accent)"/><text x="50" y="27" fill="#06231a" font-weight="700">prepare</text></g>
+      <g transform="translate(628,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">interview</text></g>
+      <g transform="translate(750,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">negotiate</text></g>
+      <g transform="translate(872,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">land</text></g>
+    </g>
+    <!-- prepare = learning hub caption -->
+    <text x="556" y="150" text-anchor="middle" font-size="11.5" fill="var(--muted)">prep pack · story bank · flashcards · drill weakest</text>
+  </svg>
+  </div>
+  <p class="lead" style="font-size:14px;margin-top:12px"><strong>Prepare</strong> is where the learning stack lives — prep packs, a behavioral story bank, spaced-repetition flashcards, and drilling your weakest dimension. Two feedback loops make it compound: your <em>rehearsal scores</em> drive what you drill next, and each <em>post-interview debrief</em> captures the real questions asked and feeds them back into prep. Every artifact stays grounded in your real CV — the loop makes you sharper, never less truthful.</p>
 
   <p class="eyebrow" style="margin-top:34px;color:var(--muted)">How it works</p>
   <div class="flow">
@@ -248,12 +287,18 @@ python3 jobhelm/mission-control.py</div>
   <p class="lead" style="font-size:13px;margin-top:14px">Shown with the bundled sample data — JobHelm renders this board the moment you clone. Readiness reflects <em>real practice</em> (a completed mock rep), not just prep files.</p>
 
   <div class="grid" style="text-align:left;margin-top:30px">
-    <div class="card"><div class="ic">🗂</div><h3>Pipeline board</h3><p>Every application as a card across stages, with search and stage filters. Click one to drill into readiness, gaps, and actions.</p></div>
-    <div class="card"><div class="ic">🎯</div><h3>Honest readiness</h3><p>Per-role readiness counts <em>actual practice</em> (a mock with a scorecard), never mere prep files — so the number tells the truth.</p></div>
-    <div class="card"><div class="ic">🎤</div><h3>In-app rehearse</h3><p>Run a full mock interview in the browser — questions read aloud, type or dictate answers, feedback + scorecard, saved as a transcript.</p></div>
-    <div class="card"><div class="ic">✍️</div><h3>Draft replies</h3><p>Draft recruiter/HM responses in your voice with your contact details. Flags spam. Never auto-sends — you review and send.</p></div>
-    <div class="card"><div class="ic">🔎</div><h3>Discover</h3><p>Turns the scan firehose into a ranked shortlist of recent, in-location, on-target roles worth acting on.</p></div>
-    <div class="card"><div class="ic">🔥</div><h3>Next best actions</h3><p>Follow-ups due, prep gaps, and warm-path reminders — the short list of what to do today, surfaced for you.</p></div>
+    <div class="card"><div class="ic">🔎</div><h3>Scan &amp; Discover</h3><p>Sweep every board — ATS at the source (Greenhouse/Lever/Ashby/Workday/iCIMS) plus aggregators — then rank the firehose into a shortlist of recent, on-target roles.</p></div>
+    <div class="card"><div class="ic">🗂</div><h3>Pipeline board</h3><p>Every application as a card across stages, with search and filters. Click one to drill into readiness, gaps, warm paths, and one-click actions.</p></div>
+    <div class="card"><div class="ic">📄</div><h3>Tailor a truthful résumé</h3><p>One click tailors your résumé to a JD. Gates check every claim traces to your CV, flag AI-tells, and strip metadata — so it reads human, never invented.</p></div>
+    <div class="card"><div class="ic">📚</div><h3>Prep pack, by dimension</h3><p>Per role: <strong>Leadership · Technical · Behavioral · Articles</strong> — JD-specific questions with model answers, all grounded in your CV.</p></div>
+    <div class="card"><div class="ic">📖</div><h3>Behavioral Story Bank</h3><p>Your real STAR stories, extracted once and tagged by competency, with a question→story map. Master a few true stories, answer anything.</p></div>
+    <div class="card"><div class="ic">🃏</div><h3>Flashcards + spaced repetition</h3><p>Active-recall deck from your CV (your metrics, behavioral triggers, concepts) with an SM-2 scheduler. Hard cards resurface sooner.</p></div>
+    <div class="card"><div class="ic">🎯</div><h3>Readiness &amp; drill the weakest</h3><p>Rehearsals score you per dimension and chart the trend. One click generates an escalated drill for your weakest area. Practice → measure → drill.</p></div>
+    <div class="card"><div class="ic">🎤</div><h3>In-app rehearse</h3><p>Run a full mock in the browser — questions read aloud, type or dictate, feedback + a per-dimension scorecard, saved as a transcript.</p></div>
+    <div class="card"><div class="ic">💰</div><h3>Negotiation prep</h3><p>Per offer: a comp benchmark (clearly flagged to verify), your leverage from the CV, anchoring scripts, and scenario responses.</p></div>
+    <div class="card"><div class="ic">📝</div><h3>Debrief → question bank</h3><p>After an interview, paste your notes. It captures the real questions asked and feeds them back so your next prep for that company is sharper.</p></div>
+    <div class="card"><div class="ic">✍️</div><h3>Draft replies &amp; outreach</h3><p>Draft recruiter/HM responses and warm-path notes in your voice. Flags spam. Never auto-sends — you review and send.</p></div>
+    <div class="card"><div class="ic">🔒</div><h3>Truthful by construction</h3><p>Every résumé, answer, and card is grounded only in your real CV, with metric-trace gates throughout. The loop makes you sharper, never inflated.</p></div>
   </div>
 
   <p class="lead" style="font-weight:600;color:var(--ink);margin-top:30px">Try it — a populated demo board, no key or data needed:</p>
