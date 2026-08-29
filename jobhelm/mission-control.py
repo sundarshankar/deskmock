@@ -593,7 +593,9 @@ def _gen_questions_for(a):
          "Realistic for the role and seniority. The goal: the candidate can scan, internalize, and rehearse these.")
     usr=(f"Role: {role} at {company}.\n\n"
          + (f"JOB DESCRIPTION (target the questions to THIS posting):\n{jd}\n\n" if jd else "")
-         + f"Candidate CV (the ONLY source of truth for facts):\n{cv}\n\nProduce the prep pack with model answers.")
+         + f"Candidate CV (the ONLY source of truth for facts):\n{cv}"
+         + (("\n\nREAL questions already asked at "+company+" (from a past interview - PREPARE THESE FIRST):\n"+"\n".join("- "+q for d,q in question_bank_for(company)[:8])) if question_bank_for(company) else "")
+         + "\n\nProduce the prep pack with model answers.")
     try:
         md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,3200)
     except Exception as e:
@@ -906,6 +908,82 @@ def do_drill(dim=""):
     prep_files.append(out.name)
     name=_render_open(out, f"drill-{slug(dim)}")
     return dict(ok=True, msg=f"🎯 {dim} drill generated + opened ({name}) — your weakest area. Rehearse, then re-mock to raise the score.")
+
+def do_negotiation(num):
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False,msg="Role not found.")
+    key=load_key()
+    if not key: return dict(ok=False,msg="No OpenRouter key.")
+    company=a["company"]; role=a["role"]
+    cv=read(CO/"cv.md")[:3000]; jd,jdsrc=_jd_text_for(a); prof=read(CO/"config/profile.yml")[:1500]
+    sys=("Create a SALARY NEGOTIATION prep brief for a senior platform/infrastructure leadership candidate. Markdown "
+         "sections:\n"
+         "## Comp benchmark (ESTIMATE — verify)\nA rough total-comp range for THIS role/level/location: base, target "
+         "bonus, equity. State PLAINLY these are estimates and the candidate must verify on levels.fyi, Glassdoor, and "
+         "Blind before anchoring. NEVER present a number as a fact.\n"
+         "## Your leverage\n4-5 points drawn from the candidate's REAL CV that justify top-of-band (scope, scale, "
+         "outcomes, scarcity of the skill set). Grounded ONLY in the CV.\n"
+         "## Anchoring & counters\nConcrete scripts: how to respond when asked for a number, how to counter a first "
+         "offer, how to use a competing offer honestly, and the non-salary levers (equity, sign-on, title, remote, "
+         "start date, review timeline).\n"
+         "## Scenarios\n3 common scenarios (a lowball, 'this is our max', an exploding offer) with a calm, specific "
+         "response to each.\n"
+         "First person, plain-ASCII, no [PERSON_NAME]. "+_ATTR_RULE+"Never invent the candidate's own numbers.")
+    usr=(f"Role: {role} at {company}.\n\n"+(f"Candidate comp target/floor (from profile):\n{prof}\n\n" if prof.strip() else "")
+         +(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth for their own facts):\n{cv}\n\nProduce the negotiation brief.")
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2800)
+    except Exception as e: return dict(ok=False,msg=f"Failed: {e}")
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    out=CO/"interview-prep"/f"{slug(company)}-negotiation.md"
+    out.write_text(f"# Negotiation prep — {role} @ {company}\n_(Leverage from your CV + scripts. Comp figures are "
+                   f"ESTIMATES — verify on levels.fyi / Glassdoor / Blind before anchoring.)_\n\n{md}\n")
+    prep_files.append(out.name)
+    name=_render_open(out, f"{slug(company)}-negotiation")
+    return dict(ok=True, msg=f"💰 Negotiation prep for {company} generated + opened ({name}). Comp numbers are estimates — verify before you anchor.")
+
+# ---- post-interview debrief -> question bank (real questions sharpen future prep) ----
+def do_debrief(num, notes):
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False,msg="Role not found.")
+    notes=(notes or "").strip()
+    if not notes: return dict(ok=False,msg="Paste your interview notes first (what was asked, how it went).")
+    key=load_key()
+    if not key: return dict(ok=False,msg="No OpenRouter key.")
+    company=a["company"]; role=a["role"]
+    sys=("Structure the candidate's raw post-interview notes into a clean debrief. Use ONLY what they wrote — never "
+         "invent questions, answers, or outcomes. Markdown sections:\n"
+         "## Questions I was asked\n(a list; tag each with [Behavioral]/[Technical]/[Leadership]/[Other]; clean up the "
+         "wording but keep the meaning)\n## What went well\n## What to improve\n## Follow-ups & next steps\n"
+         "Then, at the very end, output a machine block EXACTLY like:\n```questions\n[Technical] the question text\n"
+         "[Behavioral] the question text\n```\n(one asked-question per line, tag in brackets). Plain-ASCII, first person.")
+    usr=f"Role: {role} at {company}.\n\nMy raw notes:\n{notes[:3500]}\n\nStructure the debrief + machine block."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2200)
+    except Exception as e: return dict(ok=False,msg=f"Failed: {e}")
+    qb=re.search(r'```questions\s*(.*?)```', md, re.S); nq=0
+    if qb:
+        f=CO/"data"/"question-bank.tsv"; f.parent.mkdir(parents=True,exist_ok=True)
+        with f.open("a") as fh:
+            for ln in qb.group(1).splitlines():
+                ln=ln.strip()
+                if not ln: continue
+                mt=re.match(r'\[([^\]]+)\]\s*(.+)', ln); dim=mt.group(1) if mt else "Other"; q=(mt.group(2) if mt else ln).strip()
+                if q: fh.write(f"{slug(company)}\t{dim}\t{q}\n"); nq+=1
+    body=re.sub(r'```questions.*?```','',md,flags=re.S).strip()
+    out=CO/"interview-prep"/f"{slug(company)}-debrief.md"
+    ts=datetime.datetime.now().strftime("%Y-%m-%d")
+    prior=read(out)
+    header=prior if prior else f"# Interview debriefs — {role} @ {company}\n"
+    out.write_text(header+f"\n## Debrief — {ts}\n\n{body}\n\n---\n")
+    prep_files.append(out.name)
+    return dict(ok=True, msg=f"Debrief saved ✓ — {nq} real questions added to your question bank. They'll sharpen future prep for {company} and similar roles.")
+
+def question_bank_for(company):
+    k=slug(company); out=[]
+    for ln in read(CO/"data"/"question-bank.tsv").splitlines():
+        c=ln.split("\t")
+        if len(c)>=3 and c[0]==k: out.append((c[1],c[2]))
+    return out
+
 
 def do_open_story_bank():
     f=CO/"interview-prep"/"story-bank.md"
@@ -1317,6 +1395,7 @@ function renderDrawer(p){
       (p.haspack?'<button class="sm" onclick="act(\\'open\\',{co:byNum(\\''+p.num+'\\').company})">📂 Open .md files</button>':'')+
       '<button class="sm p" onclick="openMock(\\''+p.num+'\\')">🎤 Rehearse here</button>'+
       '<button class="sm" onclick="act(\\'mock\\',{num:\\''+p.num+'\\'})">🎙 Voice (Terminal)</button>'+
+      '<button class="sm" title="Comp benchmark + leverage + scripts" onclick="if(confirm(\\'Generate salary-negotiation prep for '+esc(p.company)+'? Comp figures are estimates to verify. ~40s\\'))act(\\'negotiation\\',{num:\\''+p.num+'\\'})">💰 Negotiation prep</button>'+
     '</div><div class="sm muted" style="margin-top:6px">Prep pack = JD-specific questions + model answers, a leadership brief, and a stack/articles guide — all grounded in your CV.</div></div>'+
     '<div class="sec"><div class="h">Update stage</div><div class="actions">'+
       (stageOf(p.status)==='evaluated'?'<button class="sm p" onclick="act(\\'apply\\',{num:\\''+p.num+'\\'})">✓ Mark applied</button>':'')+
@@ -1327,6 +1406,9 @@ function renderDrawer(p){
       '<textarea id="dmsg" style="width:100%;min-height:64px" placeholder="Paste recruiter/HM message for '+esc(p.company)+'…"></textarea>'+
       '<div style="margin-top:7px"><button class="sm p" onclick="draft(\\'dmsg\\',\\'ddraft\\')">Draft reply</button> <span class="sm muted">flags spam · adds your mobile</span></div>'+
       '<div id="ddraft" style="display:none" class="draftbox"></div></div>'+
+    '<div class="sec"><div class="h">📝 Post-interview debrief</div>'+
+      '<textarea id="dbnotes" style="width:100%;min-height:70px" placeholder="After an interview, paste your notes — what they asked, how it went. I structure it and capture the real questions into your bank to sharpen future prep."></textarea>'+
+      '<div style="margin-top:7px"><button class="sm p" onclick="act(\\'debrief\\',{num:\\''+p.num+'\\',notes:(document.getElementById(\\'dbnotes\\')||{}).value||\\''+'\\'})">Save debrief</button> <span class="sm muted">captures real questions -&gt; question bank</span></div></div>'+
     '</div>';
   document.getElementById('drawer-inner').innerHTML=h;
 }
@@ -1430,7 +1512,7 @@ async function saveSetup(){
 
 /* ---------- actions ---------- */
 var _busy={};
-var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank',drill:'Building your escalated drill',flashcards:'Building flashcards'};
+var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank',drill:'Building your escalated drill',flashcards:'Building flashcards',negotiation:'Building negotiation prep',debrief:'Saving debrief + extracting questions'};
 var _longActive=null;   // only ONE long generation at a time — no overlapping tickers, no server overload
 async function act(kind,args){
   if(_busy[kind]){toast('Still working on that — one moment…');return}
@@ -1564,6 +1646,8 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/preppack_selected": self._send(200,json.dumps(do_preppack_selected()))
         elif p=="/api/story_bank": self._send(200,json.dumps(do_story_bank()))
         elif p=="/api/open_story_bank": self._send(200,json.dumps(do_open_story_bank()))
+        elif p=="/api/negotiation": self._send(200,json.dumps(do_negotiation(args.get("num"))))
+        elif p=="/api/debrief": self._send(200,json.dumps(do_debrief(args.get("num"),args.get("notes",""))))
         elif p=="/api/flashcards": self._send(200,json.dumps(do_flashcards()))
         elif p=="/api/drill": self._send(200,json.dumps(do_drill(args.get("dim",""))))
         elif p=="/api/open_prep_pdf": self._send(200,json.dumps(do_open_prep_pdf(args.get("num"))))
