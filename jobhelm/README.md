@@ -157,6 +157,10 @@ Built on and alongside two excellent local-first projects:
 [DeskMock](https://github.com/sundarshankar/deskmock) (local mock interviews).
 JobHelm doesn't fork or bundle their code — it's an independent dashboard that pairs with them.
 
+## Disclaimer
+
+AI-assisted — review and verify everything; you are responsible for the truthfulness of your résumé. Not legal, financial, or career advice; comp figures are estimates. LLM features send your text to the AI provider you configure. See [DISCLAIMER.md](../DISCLAIMER.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

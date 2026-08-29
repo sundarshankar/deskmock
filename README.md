@@ -148,6 +148,10 @@ Built as a local-first alternative after working with two excellent projects —
 and pairs well with local dictation tools like [FluidVoice](https://github.com/extrudedawe-dev/fluidvoice).
 DeskMock does not fork or bundle their code; it's an independent tool with its own focus.
 
+## Disclaimer
+
+AI-assisted — review and verify everything; you are responsible for the truthfulness of your résumé. Not legal, financial, or career advice; comp figures are estimates. LLM features send your text to the AI provider you configure. See [DISCLAIMER.md](DISCLAIMER.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
