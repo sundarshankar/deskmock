@@ -4,7 +4,7 @@ The goal of this toolkit (DeskMock + JobHelm, on top of career-ops + DeepIntervi
 **complete, local-first companion for someone in the market for a new role** — cover the whole
 journey, not just one slice:
 
-> **scan → match → apply → connect → interview → prepare → negotiate → land.**
+> **scan → match → apply → connect → prepare → interview → negotiate → land.**
 
 Everything stays local-first and on your own API key. No cloud lock-in, no telemetry.
 
