@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DeskMock — local-first AI mock interviews</title>
-<meta name="description" content="Local-first, open-source AI mock interviewer. It reads questions aloud, you speak your answers, and it coaches you with feedback and a scorecard. Your voice never leaves your machine.">
-<meta property="og:title" content="DeskMock — local-first AI mock interviews">
-<meta property="og:description" content="Rehearse the interview out loud, on your machine. Open source. Your voice never leaves your device.">
+<title>DeskMock — your whole job search, local-first</title>
+<meta name="description" content="An open-source, local-first toolkit for the whole job search — scan every board, tailor a truthful résumé, prepare across every interview dimension, rehearse out loud, and negotiate. On your machine, on your own key. No SaaS, no telemetry.">
+<meta property="og:title" content="DeskMock — your whole job search, local-first">
+<meta property="og:description" content="Scan, apply, prepare, rehearse, negotiate, land — the entire job search, on your machine, on your own key. Open source, MIT.">
 <meta property="og:type" content="website">
 <style>
 :root{
@@ -27,7 +27,6 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
 code,kbd,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 h1,h2,h3{line-height:1.2;letter-spacing:-.01em}
-/* nav */
 nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 nav .wrap{display:flex;align-items:center;gap:18px;height:60px}
@@ -39,18 +38,21 @@ nav .wrap{display:flex;align-items:center;gap:18px;height:60px}
 .btn:hover{text-decoration:none;border-color:var(--accent)}
 .btn.p{background:var(--accent);color:#fff;border-color:var(--accent)}
 .btn.p:hover{filter:brightness(1.06)}
-/* hero */
-.hero{padding:76px 0 48px;text-align:center}
+.hero{padding:74px 0 40px;text-align:center}
 .badge{display:inline-block;font-size:12.5px;font-weight:600;color:var(--accent);
   background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
   border-radius:999px;padding:5px 13px;margin-bottom:22px}
-.hero h1{font-size:clamp(32px,5.4vw,52px);margin:0 0 16px;font-weight:800}
+.hero h1{font-size:clamp(32px,5.4vw,52px);margin:0 0 18px;font-weight:800}
 .hero h1 .g{color:var(--accent)}
-.hero p.sub{font-size:clamp(17px,2.4vw,20px);color:var(--muted);max-width:640px;margin:0 auto 28px}
+.hero p.sub{font-size:clamp(16.5px,2.2vw,19px);color:var(--muted);max-width:680px;margin:0 auto 26px}
 .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
 .hero .note{font-size:13px;color:var(--muted)}
-/* terminal */
-.term{max-width:760px;margin:44px auto 0;text-align:left;border-radius:var(--radius);overflow:hidden;
+.heroshot{max-width:960px;margin:42px auto 0}
+.heroshot img{width:100%;height:auto;border:1px solid var(--line);border-radius:14px;box-shadow:0 26px 64px -32px rgba(0,0,0,.5);display:block;background:#0d0f13}
+.heroshot figcaption{color:var(--muted);font-size:13px;margin-top:11px;text-align:center}
+.trust{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:840px;margin:30px auto 0}
+.trust span{font-size:13px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 13px}
+.term{max-width:760px;margin:8px auto 0;text-align:left;border-radius:var(--radius);overflow:hidden;
   border:1px solid var(--line);box-shadow:0 24px 60px -30px rgba(0,0,0,.45)}
 .term .bar{background:#1b222c;display:flex;align-items:center;gap:7px;padding:11px 14px}
 .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
@@ -60,50 +62,28 @@ nav .wrap{display:flex;align-items:center;gap:18px;height:60px}
   font-size:13.5px;line-height:1.7;overflow-x:auto}
 .term .p{color:var(--term-green)}.term .q{color:var(--term-blue)}.term .a{color:#e6edf3}
 .term .fb{color:var(--term-amber)}.term .d{color:var(--term-dim)}
-/* sections */
-section{padding:60px 0;border-top:1px solid var(--line)}
+section{padding:58px 0;border-top:1px solid var(--line)}
 .eyebrow{color:var(--accent);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
 section h2{font-size:clamp(24px,3.6vw,34px);margin:0 0 14px;font-weight:800}
-section .lead{color:var(--muted);font-size:17px;max-width:720px;margin:0 0 8px}
+section .lead{color:var(--muted);font-size:17px;max-width:760px;margin:0 0 8px}
 .center{text-align:center}.center .lead{margin-left:auto;margin-right:auto}
-/* steps */
+.stage-label{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:42px 0 2px}
+.stage-label h3{font-size:20px;font-weight:800;margin:0}
+.stage-label small{font-weight:500;font-size:14px;color:var(--muted)}
 .step{display:flex;align-items:center;gap:11px;font-weight:600;font-size:16px;margin:26px 0 0}
 .step .num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
   display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
 .step a{font-weight:600}
-/* code block */
 .codeblock{background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:18px 20px;overflow-x:auto;
   font-size:13.5px;line-height:1.75;margin:12px 0 6px;border:1px solid var(--line);white-space:pre}
 .codeblock .c{color:#7d8590}.codeblock .k{color:#7dd3fc}.codeblock .s{color:#a5d6a4}
-/* feature grid */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:34px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:18px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
 .card .ic{font-size:24px;margin-bottom:10px}
-.diagram-wrap{overflow-x:auto;margin-top:16px;padding-bottom:4px}
-.journey-svg{min-width:660px;width:100%;height:auto;display:block}
 .card h3{font-size:17px;margin:0 0 7px}
 .card p{margin:0;color:var(--muted);font-size:14.5px}
-/* callout */
-.callout{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--panel)),var(--panel));
-  border:1px solid color-mix(in srgb,var(--accent) 26%,var(--line));border-radius:var(--radius);padding:28px 26px;margin-top:30px}
-.callout h3{margin:0 0 8px;font-size:19px}.callout p{margin:0;color:var(--muted)}
-/* jobhelm board illustration */
-.jhboard{display:flex;gap:12px;overflow-x:auto;padding:6px 2px 12px;margin-top:26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:16px}
-.jhcol{flex:0 0 200px}
-.jhcol h4{margin:0 2px 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
-.jhcol h4 span{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:0 7px;color:var(--ink);font-size:11px}
-.jhc{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px}
-.jhc .sc{float:right;font-size:11px;font-weight:700;color:var(--accent2)}
-.jhc .co{font-weight:700;font-size:13px}
-.jhc .ro{font-size:11px;color:var(--muted);margin:1px 0 7px}
-.jhbar{height:5px;background:var(--line);border-radius:5px;overflow:hidden;margin:4px 0 5px}
-.jhbar i{display:block;height:100%}
-.jhc .meta{display:flex;justify-content:space-between;align-items:center}
-.jhc .rl{font-size:10.5px}
-.jhchips{display:flex;gap:3px}
-.jhdot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block}
-.jhdot.on{background:var(--accent)}
-/* framed screenshots + flow */
+.diagram-wrap{overflow-x:auto;margin-top:20px;padding-bottom:4px}
+.journey-svg{min-width:660px;width:100%;height:auto;display:block}
 .flow{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:28px}
 @media(max-width:760px){.flow{grid-template-columns:1fr}}
 figure.shot{margin:0}
@@ -111,17 +91,14 @@ figure.shot .num{display:inline-flex;align-items:center;justify-content:center;w
 figure.shot .cap{font-weight:600;font-size:15px;margin:0 0 10px}
 figure.shot img{width:100%;height:auto;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 40px -22px rgba(0,0,0,.5);display:block;background:#0d0f13}
 figure.shot figcaption{color:var(--muted);font-size:13px;margin-top:9px}
-/* pills */
 .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .pill{font-size:13px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
-/* faq */
 details{border:1px solid var(--line);border-radius:12px;padding:2px 18px;margin-bottom:12px;background:var(--panel)}
 details summary{cursor:pointer;font-weight:600;padding:15px 0;list-style:none;display:flex;justify-content:space-between;align-items:center}
 details summary::-webkit-details-marker{display:none}
 details summary::after{content:"+";color:var(--accent);font-size:20px;font-weight:400}
 details[open] summary::after{content:"−"}
 details p{margin:0 0 16px;color:var(--muted);font-size:15px}
-/* footer */
 footer{border-top:1px solid var(--line);padding:40px 0;color:var(--muted);font-size:14px}
 footer .wrap{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
 footer a{color:var(--muted)}footer a:hover{color:var(--ink)}
@@ -133,10 +110,10 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
 <nav><div class="wrap">
   <div class="logo">🎙 Desk<span class="m">Mock</span></div>
   <div class="navlinks">
-    <a href="#what">What</a>
+    <a href="#toolkit">The toolkit</a>
+    <a href="#stages">How it works</a>
+    <a href="#rehearse">Rehearse</a>
     <a href="#start">Setup</a>
-    <a href="#features">Features</a>
-    <a href="#jobhelm">JobHelm</a>
     <a href="#faq">FAQ</a>
     <a href="https://github.com/sundarshankar/deskmock" class="btn">GitHub ↗</a>
   </div>
@@ -144,13 +121,110 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
 
 <header class="hero"><div class="wrap">
   <span class="badge">Open source · MIT · local-first</span>
-  <h1>Rehearse the interview.<br><span class="g">Out loud. On your machine.</span></h1>
-  <p class="sub">DeskMock is a local-first AI mock interviewer. It reads questions aloud, you speak your answers, and it coaches you with feedback and a scorecard — grounded in your real CV. Your voice never leaves your device.</p>
+  <h1>Your whole job search.<br><span class="g">On your machine. Not theirs.</span></h1>
+  <p class="sub">Job hunting scatters your résumé, your pipeline, and your interview practice across a dozen clouds that own your data. This toolkit runs <strong>all of it locally</strong>, on your own key — scan every board, tailor a truthful résumé, prepare across every interview dimension, <strong>rehearse out loud</strong>, and negotiate. No SaaS, no telemetry.</p>
   <div class="cta">
     <a href="#start" class="btn p">Get started</a>
     <a href="https://github.com/sundarshankar/deskmock" class="btn">View source</a>
   </div>
-  <div class="note">No cloud voice service · no LiveKit · no GPU · your API key</div>
+  <div class="note">scan → apply → prepare → interview → negotiate → land · your API key · nothing phoned home</div>
+
+  <figure class="heroshot">
+    <img src="jobhelm-board.png" alt="JobHelm board: roles across To apply, Applied, In touch and Interview columns, each with a fit score and prep-readiness; a right rail charts interview readiness per dimension with a Drill-weakest button and next best actions" fetchpriority="high">
+    <figcaption>The command center — your entire pipeline, prep-readiness per dimension, and the next best move. Runs on bundled sample data the moment you clone.</figcaption>
+  </figure>
+
+  <div class="trust">
+    <span>🔒 Local-first</span><span>⚖️ MIT licensed</span><span>📡 No telemetry</span><span>🔑 Your own API key</span><span>🧩 One clone, two tools</span><span>💸 Pennies per session</span><span>🖥 Runs on modest hardware</span>
+  </div>
+</div></header>
+
+<section id="toolkit"><div class="wrap">
+  <p class="eyebrow">The toolkit</p>
+  <h2>One local-first companion for the whole search.</h2>
+  <p class="lead">Two engines, one repo. <strong>JobHelm</strong> is the command center that runs the journey — scan, match, apply, connect, prepare, negotiate, land. <strong>DeskMock</strong> is the rehearsal engine you practice out loud with. Everything is grounded in your real CV, on your own machine and key — and it's a <em>loop</em>: what you learn in each interview feeds straight back into sharper prep.</p>
+
+  <div class="diagram-wrap">
+  <svg viewBox="0 0 990 150" class="journey-svg" role="img" aria-label="The job-search journey: scan, match, apply, connect, prepare, interview, negotiate, land — with a debrief feedback loop from interview back to prepare, and a rehearse-to-drill loop inside prepare.">
+    <defs>
+      <marker id="jm" markerWidth="8" markerHeight="8" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--muted)"/></marker>
+      <marker id="jm2" markerWidth="9" markerHeight="9" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+    </defs>
+    <path d="M 678 92 C 678 40, 556 40, 556 92" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#jm2)"/>
+    <text x="617" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent)">debrief → sharper prep</text>
+    <g stroke="var(--muted)" stroke-width="1.6">
+      <line x1="118" y1="114" x2="134" y2="114" marker-end="url(#jm)"/>
+      <line x1="240" y1="114" x2="256" y2="114" marker-end="url(#jm)"/>
+      <line x1="362" y1="114" x2="378" y2="114" marker-end="url(#jm)"/>
+      <line x1="484" y1="114" x2="500" y2="114" marker-end="url(#jm)"/>
+      <line x1="606" y1="114" x2="622" y2="114" marker-end="url(#jm)"/>
+      <line x1="728" y1="114" x2="744" y2="114" marker-end="url(#jm)"/>
+      <line x1="850" y1="114" x2="866" y2="114" marker-end="url(#jm)"/>
+    </g>
+    <g font-size="13" text-anchor="middle">
+      <g transform="translate(18,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">scan</text></g>
+      <g transform="translate(140,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">match</text></g>
+      <g transform="translate(262,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">apply</text></g>
+      <g transform="translate(384,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">connect</text></g>
+      <g transform="translate(506,92)"><rect width="100" height="44" rx="10" fill="var(--accent)" stroke="var(--accent)"/><text x="50" y="27" fill="#06231a" font-weight="700">prepare</text></g>
+      <g transform="translate(628,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">interview</text></g>
+      <g transform="translate(750,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">negotiate</text></g>
+      <g transform="translate(872,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">land</text></g>
+    </g>
+    <text x="556" y="150" text-anchor="middle" font-size="11.5" fill="var(--muted)">prep pack · story bank · flashcards · drill weakest</text>
+  </svg>
+  </div>
+  <p class="lead" style="font-size:14px;margin-top:12px"><strong>Prepare</strong> is where the learning stack lives. Two feedback loops make it compound: your <em>rehearsal scores</em> drive what you drill next, and each <em>post-interview debrief</em> captures the real questions asked and feeds them back into prep. Every artifact stays grounded in your real CV — the loop makes you sharper, never less truthful.</p>
+</div></section>
+
+<section id="stages"><div class="wrap">
+  <p class="eyebrow">How it works</p>
+  <h2>Organized around your search — stage by stage.</h2>
+  <p class="lead">Not a pile of features. Each stage of the journey has the tool it needs, and they hand off to each other.</p>
+
+  <div class="stage-label"><h3>🔎 Find &amp; apply</h3><small>get in front of the right roles, truthfully</small></div>
+  <div class="grid">
+    <div class="card"><div class="ic">🔎</div><h3>Scan &amp; Discover</h3><p>Sweep every board — ATS at the source (Greenhouse/Lever/Ashby/Workday/iCIMS) plus aggregators — then rank the firehose into a shortlist of recent, on-target roles.</p></div>
+    <div class="card"><div class="ic">📄</div><h3>Tailor a truthful résumé</h3><p>One click tailors your résumé to a JD. Gates check every claim traces to your CV, flag AI-tells, and strip metadata — so it reads human, never invented.</p></div>
+    <div class="card"><div class="ic">🗂</div><h3>Pipeline board</h3><p>Every application as a card across stages, with fit scores and filters. Click a role to drill into readiness, gaps, warm paths, and one-click actions.</p></div>
+    <div class="card"><div class="ic">✍️</div><h3>Draft replies &amp; outreach</h3><p>Draft recruiter/HM responses and warm-path notes in your voice. Flags spam. Never auto-sends — you review and send.</p></div>
+  </div>
+
+  <div class="stage-label"><h3>📚 Prepare</h3><small>the learning stack — active recall, not re-reading</small></div>
+  <div class="grid">
+    <div class="card"><div class="ic">📚</div><h3>Prep pack, by dimension</h3><p>Per role: <strong>Leadership · Technical · Behavioral · Articles</strong> — JD-specific questions with model answers, plus live-fetched recent articles on the stack. All grounded in your CV.</p></div>
+    <div class="card"><div class="ic">📖</div><h3>Behavioral Story Bank</h3><p>Your real STAR stories, extracted once and tagged by competency, with a question→story map. Master a few true stories, answer anything.</p></div>
+    <div class="card"><div class="ic">🃏</div><h3>Flashcards + spaced repetition</h3><p>Active-recall deck from your CV (your metrics, behavioral triggers, concepts) with an SM-2 scheduler. Hard cards resurface sooner.</p></div>
+    <div class="card"><div class="ic">🎯</div><h3>Readiness &amp; drill the weakest</h3><p>Rehearsals score you per dimension and chart the trend. One click generates an escalated drill for your weakest area. Practice → measure → drill.</p></div>
+  </div>
+
+  <div class="stage-label"><h3>🎤 Interview &amp; negotiate</h3><small>rehearse for the moment that decides it, then close</small></div>
+  <div class="grid">
+    <div class="card"><div class="ic">🎤</div><h3>Rehearse — out loud (DeskMock)</h3><p>A full mock interview: questions read aloud, you speak your answers, feedback + a per-dimension scorecard. In the Terminal or in the browser. <a href="#rehearse">See it below ↓</a></p></div>
+    <div class="card"><div class="ic">💰</div><h3>Negotiation prep</h3><p>Per offer: a comp benchmark (clearly flagged to verify), your leverage from the CV, anchoring scripts, and scenario responses.</p></div>
+    <div class="card"><div class="ic">📝</div><h3>Debrief → question bank</h3><p>After an interview, paste your notes. It captures the real questions asked and feeds them back so your next prep for that company is sharper.</p></div>
+    <div class="card"><div class="ic">🔒</div><h3>Truthful by construction</h3><p>Every résumé, answer, and card is grounded only in your real CV, with metric-trace gates throughout. The loop makes you sharper, never inflated.</p></div>
+  </div>
+
+  <p class="eyebrow" style="margin-top:44px;color:var(--muted)">See the command center</p>
+  <div class="flow">
+    <figure class="shot">
+      <p class="cap"><span class="num">1</span>Your whole pipeline</p>
+      <img src="jobhelm-board.png" alt="JobHelm board with an interview-readiness chart per dimension and a drill-weakest button" loading="lazy">
+      <figcaption>Every role by stage, with fit score and prep-readiness. The right rail charts <strong>interview readiness per dimension</strong> with a "drill weakest" button. Story Bank and Flashcards live in the header.</figcaption>
+    </figure>
+    <figure class="shot">
+      <p class="cap"><span class="num">2</span>Drill into any role</p>
+      <img src="jobhelm-drawer.png" alt="JobHelm role drawer with an interview-prep row and negotiation prep" loading="lazy">
+      <figcaption>Open the drawer: readiness, gaps, warm path, assisted apply, and a full <strong>Interview Prep</strong> row — attack each round (Leadership / Technical / Behavioral / Articles), rehearse, and <strong>negotiation prep</strong>.</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section id="rehearse"><div class="wrap">
+  <p class="eyebrow">The rehearsal engine · DeskMock</p>
+  <h2>Rehearse the interview — out loud, on your machine.</h2>
+  <p class="lead">Most AI mock-interview tools are cloud SaaS or need a real-time voice stack (LiveKit + cloud speech, often a GPU). DeskMock takes the opposite stance: <strong>keep the voice local, keep the brain swappable, keep it a single command.</strong> On-device dictation captures your spoken answer and only <em>text</em> reaches the model — on your own key. Point it at a local LLM and nothing leaves your machine at all.</p>
 
   <div class="term">
     <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>deskmock — mock interview</span></div>
@@ -170,28 +244,23 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
 
 <span class="d">   /done → scorecard  ·  /repeat → hear it again  ·  /skip</span></pre>
   </div>
-</div></header>
-
-<section id="what"><div class="wrap">
-  <p class="eyebrow">What is DeskMock?</p>
-  <h2>A private interview coach that runs from your desk.</h2>
-  <p class="lead">Most AI mock-interview tools are cloud SaaS or need a real-time voice stack (LiveKit + cloud speech, often a GPU). That shuts out anyone who is privacy-conscious, offline-ish, or on modest hardware. DeskMock takes the opposite stance: <strong>keep the voice local, keep the brain swappable, keep it a single command.</strong></p>
-  <p class="lead">On-device dictation captures your spoken answer and only <em>text</em> reaches the model — on your own key. Point the model at a local endpoint (vLLM / Ollama) and nothing leaves your machine at all.</p>
   <div class="pills">
     <span class="pill">macOS <code>say</code> reads questions aloud</span>
     <span class="pill">Local dictation → clipboard</span>
     <span class="pill">Any OpenAI-compatible LLM</span>
+    <span class="pill">Per-dimension scorecard</span>
     <span class="pill">Transcripts saved locally</span>
-    <span class="pill">Single command</span>
+    <span class="pill">Readiness counts real reps</span>
   </div>
+  <p class="lead" style="font-size:14px;margin-top:16px">Each rehearsal is scored per dimension and feeds JobHelm's <strong>readiness</strong> chart — which tells you exactly what to <strong>drill</strong> next. Prefer to keep hands on keyboard? The same mock runs in the browser inside JobHelm.</p>
 </div></section>
 
 <section id="start"><div class="wrap">
   <p class="eyebrow">Get started</p>
   <h2>Set up in under a minute.</h2>
-  <p class="lead"><strong>One clone gives you both tools</strong> — DeskMock (mock interviews) and JobHelm (the command center). Pure Python, <strong>no dependencies to install</strong>. You need Python 3.9+ and an OpenAI-compatible API key (or a local model). Voice is optional; you can start by typing.</p>
+  <p class="lead"><strong>One clone gives you both engines</strong> — JobHelm (the command center) and DeskMock (rehearsal). Pure Python, <strong>no dependencies to install</strong>. You need Python 3.9+ and an OpenAI-compatible API key (or a local model). Voice is optional; you can start by typing.</p>
 
-  <p class="step"><span class="num">1</span> Get the code (this repo ships both DeskMock and JobHelm)</p>
+  <p class="step"><span class="num">1</span> Get the code (this repo ships both tools)</p>
   <div class="codeblock">git clone https://github.com/sundarshankar/deskmock.git
 <span class="k">cd</span> deskmock</div>
 
@@ -199,115 +268,18 @@ footer .flinks{display:flex;gap:18px;flex-wrap:wrap}
   <div class="codeblock"><span class="k">export</span> OPENROUTER_API_KEY=<span class="s">sk-or-your-key-here</span>
 <span class="c"># prefer a local model? skip the key and pass --base-url http://localhost:11434/v1</span></div>
 
-  <p class="step"><span class="num">3</span> Run either tool — both work on bundled sample data</p>
-  <div class="codeblock"><span class="c"># DeskMock — mock interviews (type or dictate; /done for your scorecard)</span>
-python3 deskmock.py --clipboard
+  <p class="step"><span class="num">3</span> Run either engine — both work on bundled sample data</p>
+  <div class="codeblock"><span class="c"># JobHelm — the whole search (opens a demo board at http://localhost:8899)</span>
+python3 jobhelm/mission-control.py
 
-<span class="c"># JobHelm — job-search command center (opens a demo board at http://localhost:8899)</span>
-python3 jobhelm/mission-control.py</div>
+<span class="c"># DeskMock — rehearse out loud (type or dictate; /done for your scorecard)</span>
+python3 deskmock.py --clipboard</div>
 
   <p class="lead" style="font-size:15px">Both run out of the box on the bundled samples, so they work the moment you clone. Point them at your own CV / job search when you're ready — see the docs. For DeskMock voice (read-aloud + hands-free dictation), add <code>--speak</code>.</p>
   <div class="cta" style="justify-content:flex-start;margin-top:22px">
-    <a href="https://github.com/sundarshankar/deskmock#setup" class="btn p">Full setup &amp; voice guide</a>
-    <a href="https://github.com/sundarshankar/deskmock#troubleshooting" class="btn">Troubleshooting</a>
+    <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm#readme" class="btn p">JobHelm docs &amp; setup</a>
+    <a href="https://github.com/sundarshankar/deskmock#setup" class="btn">DeskMock voice guide</a>
     <a href="https://github.com/sundarshankar/deskmock" class="btn">Star on GitHub</a>
-  </div>
-</div></section>
-
-<section id="features"><div class="wrap center">
-  <p class="eyebrow">Why DeskMock</p>
-  <h2>Practice that stays yours.</h2>
-  <p class="lead">Everything that makes it useful, without giving up your privacy or your hardware.</p>
-  <div class="grid" style="text-align:left">
-    <div class="card"><div class="ic">🔒</div><h3>Your voice stays local</h3><p>On-device dictation transcribes your answer; only the text reaches the model. Point at a local LLM and nothing leaves your machine.</p></div>
-    <div class="card"><div class="ic">🧠</div><h3>Swappable brain</h3><p>Any OpenAI-compatible endpoint — OpenRouter, vLLM, Ollama. Your key, your model choice, your cost.</p></div>
-    <div class="card"><div class="ic">🎯</div><h3>Grounded in your real CV</h3><p>Questions and coaching are built from your actual CV and the job description — never invented experience.</p></div>
-    <div class="card"><div class="ic">📊</div><h3>Real feedback + scorecard</h3><p>Per-answer feedback and power phrases, then a scorecard: clarity, structure, specificity, technical depth, executive presence.</p></div>
-    <div class="card"><div class="ic">🗂</div><h3>Transcripts you keep</h3><p>Every session is saved locally as markdown so you can review answers and track how you improve.</p></div>
-    <div class="card"><div class="ic">⚡</div><h3>No heavy stack</h3><p>No LiveKit, no cloud voice service, no GPU. A single command on modest hardware.</p></div>
-  </div>
-
-</div></section>
-
-<section id="jobhelm"><div class="wrap">
-  <p class="eyebrow">The command center</p>
-  <h2>JobHelm — your whole search on one board.</h2>
-  <p class="lead">DeskMock rehearses you; <strong>JobHelm</strong> runs the search. In the <strong>same repo</strong>, it's a local dashboard for the <strong>entire journey</strong> — find matching roles across every board, tailor a truthful résumé per role, prepare across every interview dimension, rehearse, negotiate, and feed each debrief back into sharper prep. Same philosophy: your data, your machine, your key.</p>
-
-  <p class="eyebrow" style="margin-top:34px;color:var(--muted)">The whole journey — a loop, not a line</p>
-  <div class="diagram-wrap">
-  <svg viewBox="0 0 990 150" class="journey-svg" role="img" aria-label="The job-search journey: scan, match, apply, connect, prepare, interview, negotiate, land — with a debrief feedback loop from interview back to prepare, and a rehearse-to-drill loop inside prepare.">
-    <defs>
-      <marker id="jm" markerWidth="8" markerHeight="8" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--muted)"/></marker>
-      <marker id="jm2" markerWidth="9" markerHeight="9" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
-    </defs>
-    <!-- debrief feedback arc: interview -> prepare -->
-    <path d="M 678 92 C 678 40, 556 40, 556 92" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#jm2)"/>
-    <text x="617" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent)">debrief → sharper prep</text>
-    <!-- connecting arrows -->
-    <g stroke="var(--muted)" stroke-width="1.6">
-      <line x1="118" y1="114" x2="134" y2="114" marker-end="url(#jm)"/>
-      <line x1="240" y1="114" x2="256" y2="114" marker-end="url(#jm)"/>
-      <line x1="362" y1="114" x2="378" y2="114" marker-end="url(#jm)"/>
-      <line x1="484" y1="114" x2="500" y2="114" marker-end="url(#jm)"/>
-      <line x1="606" y1="114" x2="622" y2="114" marker-end="url(#jm)"/>
-      <line x1="728" y1="114" x2="744" y2="114" marker-end="url(#jm)"/>
-      <line x1="850" y1="114" x2="866" y2="114" marker-end="url(#jm)"/>
-    </g>
-    <!-- nodes -->
-    <g font-size="13" text-anchor="middle">
-      <g transform="translate(18,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">scan</text></g>
-      <g transform="translate(140,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">match</text></g>
-      <g transform="translate(262,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">apply</text></g>
-      <g transform="translate(384,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">connect</text></g>
-      <g transform="translate(506,92)"><rect width="100" height="44" rx="10" fill="var(--accent)" stroke="var(--accent)"/><text x="50" y="27" fill="#06231a" font-weight="700">prepare</text></g>
-      <g transform="translate(628,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">interview</text></g>
-      <g transform="translate(750,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">negotiate</text></g>
-      <g transform="translate(872,92)"><rect width="100" height="44" rx="10" fill="var(--panel)" stroke="var(--line)"/><text x="50" y="27" fill="var(--ink)">land</text></g>
-    </g>
-    <!-- prepare = learning hub caption -->
-    <text x="556" y="150" text-anchor="middle" font-size="11.5" fill="var(--muted)">prep pack · story bank · flashcards · drill weakest</text>
-  </svg>
-  </div>
-  <p class="lead" style="font-size:14px;margin-top:12px"><strong>Prepare</strong> is where the learning stack lives — prep packs, a behavioral story bank, spaced-repetition flashcards, and drilling your weakest dimension. Two feedback loops make it compound: your <em>rehearsal scores</em> drive what you drill next, and each <em>post-interview debrief</em> captures the real questions asked and feeds them back into prep. Every artifact stays grounded in your real CV — the loop makes you sharper, never less truthful.</p>
-
-  <p class="eyebrow" style="margin-top:34px;color:var(--muted)">How it works</p>
-  <div class="flow">
-    <figure class="shot">
-      <p class="cap"><span class="num">1</span>See your whole pipeline</p>
-      <img src="jobhelm-board.png" alt="JobHelm Kanban board: roles as cards across To apply, Applied, In touch, and Interview columns, each with a score and prep-readiness; a right rail shows an Interview Readiness chart per dimension with a Drill-weakest button, plus Next Best Actions" loading="lazy">
-      <figcaption>Every role as a card by stage, with score and prep-readiness. The right rail charts your <strong>interview readiness per dimension</strong> (with a "drill weakest" button) and the next best actions. Story Bank and Flashcards live in the header.</figcaption>
-    </figure>
-    <figure class="shot">
-      <p class="cap"><span class="num">2</span>Drill into any role</p>
-      <img src="jobhelm-drawer.png" alt="JobHelm role drawer: readiness from real practice, materials chips, gaps to close, warm path, assisted apply, and an Interview Prep row (generate prep pack, questions, open pack, rehearse) plus Negotiation prep" loading="lazy">
-      <figcaption>Click a card to open the drawer: honest readiness, gaps, warm path, assisted apply, and a full <strong>Interview Prep</strong> row — generate the prep pack, rehearse, and <strong>negotiation prep</strong>, all in one place.</figcaption>
-    </figure>
-  </div>
-  <p class="lead" style="font-size:13px;margin-top:14px">Shown with the bundled sample data — JobHelm renders this board the moment you clone. Readiness reflects <em>real practice</em> (a completed mock rep), not just prep files.</p>
-
-  <div class="grid" style="text-align:left;margin-top:30px">
-    <div class="card"><div class="ic">🔎</div><h3>Scan &amp; Discover</h3><p>Sweep every board — ATS at the source (Greenhouse/Lever/Ashby/Workday/iCIMS) plus aggregators — then rank the firehose into a shortlist of recent, on-target roles.</p></div>
-    <div class="card"><div class="ic">🗂</div><h3>Pipeline board</h3><p>Every application as a card across stages, with search and filters. Click one to drill into readiness, gaps, warm paths, and one-click actions.</p></div>
-    <div class="card"><div class="ic">📄</div><h3>Tailor a truthful résumé</h3><p>One click tailors your résumé to a JD. Gates check every claim traces to your CV, flag AI-tells, and strip metadata — so it reads human, never invented.</p></div>
-    <div class="card"><div class="ic">📚</div><h3>Prep pack, by dimension</h3><p>Per role: <strong>Leadership · Technical · Behavioral · Articles</strong> — JD-specific questions with model answers, all grounded in your CV.</p></div>
-    <div class="card"><div class="ic">📖</div><h3>Behavioral Story Bank</h3><p>Your real STAR stories, extracted once and tagged by competency, with a question→story map. Master a few true stories, answer anything.</p></div>
-    <div class="card"><div class="ic">🃏</div><h3>Flashcards + spaced repetition</h3><p>Active-recall deck from your CV (your metrics, behavioral triggers, concepts) with an SM-2 scheduler. Hard cards resurface sooner.</p></div>
-    <div class="card"><div class="ic">🎯</div><h3>Readiness &amp; drill the weakest</h3><p>Rehearsals score you per dimension and chart the trend. One click generates an escalated drill for your weakest area. Practice → measure → drill.</p></div>
-    <div class="card"><div class="ic">🎤</div><h3>In-app rehearse</h3><p>Run a full mock in the browser — questions read aloud, type or dictate, feedback + a per-dimension scorecard, saved as a transcript.</p></div>
-    <div class="card"><div class="ic">💰</div><h3>Negotiation prep</h3><p>Per offer: a comp benchmark (clearly flagged to verify), your leverage from the CV, anchoring scripts, and scenario responses.</p></div>
-    <div class="card"><div class="ic">📝</div><h3>Debrief → question bank</h3><p>After an interview, paste your notes. It captures the real questions asked and feeds them back so your next prep for that company is sharper.</p></div>
-    <div class="card"><div class="ic">✍️</div><h3>Draft replies &amp; outreach</h3><p>Draft recruiter/HM responses and warm-path notes in your voice. Flags spam. Never auto-sends — you review and send.</p></div>
-    <div class="card"><div class="ic">🔒</div><h3>Truthful by construction</h3><p>Every résumé, answer, and card is grounded only in your real CV, with metric-trace gates throughout. The loop makes you sharper, never inflated.</p></div>
-  </div>
-
-  <p class="lead" style="font-weight:600;color:var(--ink);margin-top:30px">Try it — a populated demo board, no key or data needed:</p>
-  <div class="codeblock">git clone https://github.com/sundarshankar/deskmock.git
-<span class="k">cd</span> deskmock
-python3 jobhelm/mission-control.py   <span class="c"># opens http://localhost:8899</span></div>
-  <div class="cta" style="justify-content:flex-start;margin-top:18px">
-    <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm" class="btn p">Explore JobHelm</a>
-    <a href="https://github.com/sundarshankar/deskmock/tree/main/jobhelm#readme" class="btn">JobHelm docs &amp; setup</a>
   </div>
 </div></section>
 
@@ -315,12 +287,11 @@ python3 jobhelm/mission-control.py   <span class="c"># opens http://localhost:88
   <p class="eyebrow">FAQ</p>
   <h2>Questions, answered.</h2>
   <div style="margin-top:26px">
-    <details open><summary>Does my voice get sent to the cloud?</summary><p>No. Dictation happens on your device; only the transcribed <em>text</em> is sent to the LLM, on your own API key. If you point the model at a local endpoint (vLLM / Ollama), nothing leaves your machine at all.</p></details>
-    <details><summary>Do I need a GPU or a real-time voice stack?</summary><p>No — no LiveKit, no cloud STT/TTS, no GPU. DeskMock uses your OS dictation for input and macOS <code>say</code> to read questions aloud. It runs on modest hardware as a single command.</p></details>
-    <details><summary>Which LLMs work?</summary><p>Any OpenAI-compatible endpoint. The default is OpenRouter with <code>deepseek/deepseek-v3.2</code> (cheap and reliable), but you can pass <code>--model</code> and <code>--base-url</code> to use anything, including a local model.</p></details>
-    <details><summary>What operating system do I need?</summary><p>The read-aloud half uses macOS <code>say</code> plus a dictation tool, so voice is best on macOS today. The interview loop itself is cross-platform — on any OS you can type your answers and get the same coaching and scorecard.</p></details>
-    <details><summary>Is it really free?</summary><p>Yes — DeskMock is open source under the MIT license. You only pay for your own LLM usage (or nothing, if you run a local model).</p></details>
-    <details><summary>How is this different from cloud mock-interview apps?</summary><p>They're SaaS: your data and voice go to their servers, often behind a subscription and a heavy voice stack. DeskMock is local-first, private, swappable, and a single command — built for people who'd rather keep it on their own machine.</p></details>
+    <details open><summary>Is this a mock-interview tool or a job-search tool?</summary><p>Both — it's one toolkit for the whole search. <strong>JobHelm</strong> runs the pipeline (scan, apply, prepare, negotiate, track); <strong>DeskMock</strong> is the rehearsal engine you practice out loud with. They ship in one repo and hand off to each other: rehearsal scores drive what you drill, and debriefs feed your next prep.</p></details>
+    <details><summary>What stays on my machine?</summary><p>Your data, your pipeline, your transcripts — there are no servers run by this project and no telemetry. The only thing that leaves is the text sent to the LLM provider <em>you</em> configure (your CV, a JD), on your own key. Point the model at a local endpoint (vLLM / Ollama) and nothing leaves at all. Dictation is on-device; your voice is never uploaded.</p></details>
+    <details><summary>Which LLMs work?</summary><p>Any OpenAI-compatible endpoint. The default is OpenRouter with <code>deepseek/deepseek-v3.2</code> (cheap and reliable); set a different model per task (e.g. a stronger model for the résumé) or a local one via <code>--base-url</code>.</p></details>
+    <details><summary>What operating system do I need?</summary><p>The board, prep, résumé, and in-browser rehearse are cross-platform. DeskMock's read-aloud voice uses macOS <code>say</code> + a dictation tool, so hands-free voice is best on macOS today; on any OS you can type and get the same coaching and scorecard.</p></details>
+    <details><summary>Is it really free?</summary><p>Yes — open source under the MIT license. You only pay for your own LLM usage (or nothing, if you run a local model).</p></details>
     <details><summary>Can I trust what it generates?</summary><p>Treat it as a strong assistant, not an oracle. It's AI-assisted and grounded in your real CV with accuracy checks, but outputs can still be wrong — <strong>review and verify everything, and you're responsible for the truthfulness of your résumé.</strong> Comp figures are estimates to verify; nothing here is legal, financial, or career advice. LLM features send your text to the AI provider you configure, and board scans are subject to each site's terms. See the <a href="https://github.com/sundarshankar/deskmock/blob/main/DISCLAIMER.md">full disclaimer</a>.</p></details>
   </div>
 </div></section>
