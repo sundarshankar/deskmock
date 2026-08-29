@@ -1781,9 +1781,23 @@ class H(BaseHTTPRequestHandler):
         else: self._send(404,"{}")
 
 if __name__=="__main__":
-    srv=ThreadingHTTPServer((HOST,PORT),H)
-    print(f"JobHelm Mission Control → http://localhost:{PORT}  (bind {HOST}:{PORT}, Ctrl-C to stop)")
-    if HOST in ("127.0.0.1","localhost"):
-        try: threading.Timer(0.8,lambda: webbrowser.open(f"http://127.0.0.1:{PORT}")).start()
+    ThreadingHTTPServer.allow_reuse_address = True   # avoid TIME_WAIT rebind failures
+    try:
+        srv=ThreadingHTTPServer((HOST,PORT),H)
+    except OSError as e:
+        if getattr(e,"errno",None) in (48,98,10048):   # Address already in use (macOS 48 / Linux 98 / Windows 10048)
+            print(f"\n⚠️  Port {PORT} is already in use — another JobHelm is probably still running.")
+            print( "   Stop it, then start again — or just use the launcher (run.sh / run.ps1) which does this for you:")
+            print(f"     macOS/Linux : lsof -ti:{PORT} | xargs kill -9")
+            print(f"     Windows     : Get-Process -Id (Get-NetTCPConnection -LocalPort {PORT}).OwningProcess | Stop-Process -Force")
+            print(f"   …or pick another port:  JOBHELM_PORT={PORT+1}  (then open http://127.0.0.1:{PORT+1})")
+        else:
+            print(f"\n⚠️  Could not start JobHelm: {e}")
+        raise SystemExit(1)
+    url = f"http://127.0.0.1:{PORT}" if HOST in ("127.0.0.1","localhost","0.0.0.0") else f"http://{HOST}:{PORT}"
+    print(f"JobHelm Mission Control → {url}  (bind {HOST}:{PORT}, Ctrl-C to stop)")
+    if HOST in ("127.0.0.1","localhost","0.0.0.0"):
+        try: threading.Timer(0.8,lambda: webbrowser.open(url)).start()
         except Exception: pass
-    srv.serve_forever()
+    try: srv.serve_forever()
+    except KeyboardInterrupt: print("\nJobHelm stopped."); srv.server_close()
