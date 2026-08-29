@@ -80,5 +80,23 @@ out = mc._scrub_contact_placeholders("Best,\nAlex\n[PHONE]")
 check("scrubs [PHONE] to the configured mobile", out.strip().endswith(mc.MOBILE), out)
 check("leaves normal text alone", mc._scrub_contact_placeholders("Talk soon.") == "Talk soon.")
 
+print("== field-adaptive prep: works for non-tech AND tech (no LLM) ==")
+# Representative CV text — a finance-leadership candidate (non-tech) and a platform-eng candidate (tech).
+FINANCE = ("Director of FP&A and Corporate Finance. DCF and LBO modeling, valuation, US GAAP/IFRS, SOX compliance, "
+           "budgeting and forecasting, variance analysis, month-end close, SAP/Oracle/Hyperion, CPA.")
+TECH    = ("Director of Platform Engineering. Kubernetes, SRE, Terraform/IaC, cloud infrastructure, CI/CD, "
+           "observability, service mesh, incident management.")
+# 1) field detector
+check("field detector: finance CV -> NON-tech", mc._looks_tech(FINANCE) is False, mc._looks_tech(FINANCE))
+check("field detector: tech CV -> tech",        mc._looks_tech(TECH) is True,     mc._looks_tech(TECH))
+# 2) tech-only curated GitHub resources are gated by field
+check("curated tech resources shown for tech role", "github.com" in mc._res_section("technical", ("technical",), True))
+check("curated tech resources hidden for non-tech role", mc._res_section("technical", ("technical",), False) == "")
+# 3) the domain/technical question prompt is field-adaptive, not hardcoded to tech
+tqp = mc._QSET["technical"][1].lower()
+check("technical prompt infers the candidate's field", "infer" in tqp and "field" in tqp, tqp[:60])
+check("technical prompt covers non-tech fields (e.g. finance)", "finance" in tqp)
+check("technical prompt does not force software-only", "do not default to software" in tqp)
+
 print(f"\n==== {PASS} passed, {FAIL} failed ====")
 sys.exit(1 if FAIL else 0)
