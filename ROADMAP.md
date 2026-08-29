@@ -36,7 +36,9 @@ DeskMock should be the one place that links the whole prep:
 - **Latest articles** on the role's tech stack (scan recent writing to complement prep).
 - **Note-taking** per role/round.
 - **Technical-question matching** to the JD (per-dimension question sets grounded in the CV).
-- **Flashcards** for key concepts.
+- **Flashcards for key concepts** ✅ — SM-2 spaced repetition, per-viewer.
+- **Behavioral Story Bank** ✅ — your real STAR stories once, mapped to any question.
+- **Adaptive readiness** ✅ — rehearse → per-dimension score → drill the weakest.
 - **Curated resource library** per dimension (leadership · technical/SRE · system design · behavioral) — see [PREP-RESOURCES.md](PREP-RESOURCES.md); auto-link the matching ones per JD.
 - **DeepInterview** for structured prep + **DeskMock** voice/in-app rehearsal with a scorecard.
 - Honest **readiness** driven by real practice, never artifact existence.
