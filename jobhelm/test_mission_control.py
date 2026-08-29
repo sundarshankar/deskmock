@@ -98,5 +98,14 @@ check("technical prompt infers the candidate's field", "infer" in tqp and "field
 check("technical prompt covers non-tech fields (e.g. finance)", "finance" in tqp)
 check("technical prompt does not force software-only", "do not default to software" in tqp)
 
+print("== cross-platform file open (stubbed — no real window) ==")
+_origPopen = mc.subprocess.Popen
+mc.subprocess.Popen = lambda *a, **k: None   # stub launcher so the test opens nothing
+try:
+    check("_open_file exists", callable(getattr(mc, "_open_file", None)))
+    check("_open_file returns True when a launcher succeeds", mc._open_file("/tmp/nonexistent.pdf") is True)
+finally:
+    mc.subprocess.Popen = _origPopen
+
 print(f"\n==== {PASS} passed, {FAIL} failed ====")
 sys.exit(1 if FAIL else 0)

@@ -132,8 +132,9 @@ Full setup, configuration, and how to point it at your own [career-ops](https://
 
 ## Requirements
 
-Python 3.9+, macOS for `--speak`/`--auto` (Linux/Windows contributions welcome — see below). An
-OpenAI-compatible API key with a little credit (`deepseek-v3.2` is pennies per session).
+Python 3.9+ and an OpenAI-compatible API key (`deepseek-v3.2` is pennies per session; any provider works — see JobHelm's config for Gemini's free tier).
+
+**Platform support:** the whole thing — JobHelm's board, prep, résumé tailoring, scanning, and **in-browser rehearsal** — runs on **macOS, Windows, and Linux** (files open with your OS default app on each). The only **macOS-only** extras are DeskMock's read-aloud voice (`--speak`), hands-free dictation (`--auto`), and the Terminal-voice launcher; on Windows/Linux those degrade gracefully — you **type your answers** and rehearse in the browser.
 
 ## Contributing
 

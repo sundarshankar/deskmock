@@ -125,6 +125,12 @@ def main():
     ap.add_argument("--clipboard", action="store_true")
     args = ap.parse_args()
 
+    # --auto (and --speak) rely on macOS `say`/`pbpaste`; on Windows/Linux fall back to typing so nothing hangs.
+    _is_mac = hasattr(os, "uname") and os.uname().sysname == "Darwin"
+    if not _is_mac and (args.auto or args.clipboard):
+        print("\033[33m  note: hands-free dictation/clipboard is macOS-only — falling back to typing your answers.\033[0m")
+        args.auto = args.clipboard = False
+
     key = load_key(args.base_url)
     cv = read_text(args.cv, 6000)
     jd = read_text(args.jd, 4000)

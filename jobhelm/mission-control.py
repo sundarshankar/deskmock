@@ -295,6 +295,18 @@ def run(cmd, cwd):
     except Exception as e:
         return (False, str(e))
 
+def _open_file(path):
+    # cross-platform "open this file with the OS default app": macOS `open`, Linux `xdg-open`, Windows os.startfile
+    p=str(path)
+    if os.name=="nt":
+        try: os.startfile(p); return True
+        except Exception: pass
+    for cmd in (["open",p],["xdg-open",p]):
+        try: subprocess.Popen(cmd); return True
+        except Exception: continue
+    try: webbrowser.open(pathlib.Path(p).resolve().as_uri()); return True   # last resort: open in browser
+    except Exception: return False
+
 def do_scan():
     ok,out=run(["node","scan.mjs"],CO)
     if not ok: return dict(ok=False, msg=f"Scan failed: {out[-200:]}")
@@ -359,6 +371,8 @@ def _mock_running():
         return False
 
 def do_mock(num=None, co=""):
+    if os.name=="nt" or (hasattr(os,"uname") and os.uname().sysname!="Darwin"):
+        return dict(ok=False, msg="Terminal voice rehearse is macOS-only — use 🎤 Rehearse here (in-browser) instead.")
     role=""
     if num:
         a=next((x for x in apps() if x["num"]==str(num)),None)
@@ -454,7 +468,7 @@ def do_open_jd(num):
     f=saved_jd(a) if a else ""
     if not f: return dict(ok=False, msg="No archived JD saved for this role yet.")
     try:
-        subprocess.Popen(["open", str(CO/"jds"/f)])
+        _open_file(CO/"jds"/f)
         return dict(ok=True, msg=f"Opened saved JD: {f}")
     except Exception as e:
         return dict(ok=False, msg=str(e))
@@ -463,7 +477,7 @@ def do_open(co):
     f = pack(co) or gapd(co)
     if not f: return dict(ok=False, msg=f"No prep pack yet for {co}.")
     try:
-        subprocess.Popen(["open", str(CO/"interview-prep"/f)])
+        _open_file(CO/"interview-prep"/f)
         return dict(ok=True, msg=f"Opened {f}")
     except Exception as e:
         return dict(ok=False, msg=str(e))
@@ -474,7 +488,7 @@ def do_open_resume(num):
     r=resume_for(a["company"], num)
     if not r: return dict(ok=False, msg=f"No tailored resume PDF for {a['company']} in output/ — generate one first.")
     try:
-        subprocess.Popen(["open", str(CO/"output"/r)])
+        _open_file(CO/"output"/r)
         return dict(ok=True, msg=f"Opened {r} — drag it into the application's resume field.")
     except Exception as e:
         return dict(ok=False, msg=str(e))
@@ -877,7 +891,8 @@ def do_open_prep_pdf(num):
             return dict(ok=False,msg="No prep pack yet — click 'Generate prep pack' first.")
         ok,target,info=_make_prep_pack_file(a["company"],a["role"])
         if not ok: return dict(ok=False,msg=f"Could not build prep doc: {info}")
-    try: subprocess.Popen(["open", str(target)])
+    try:
+        _open_file(target)
     except Exception as e: return dict(ok=False,msg=str(e))
     return dict(ok=True,msg=f"Opened {target.name}")
 
@@ -910,7 +925,8 @@ def _render_open(md_path, stem):
             cm=HERE.parent/"clean-markers.mjs"
             if cm.exists(): run(["node",str(cm),"clean",str(pdf),"--author",(NAME or "Candidate")], cm.parent)
             target=pdf
-    try: subprocess.Popen(["open", str(target)])
+    try:
+        _open_file(target)
     except Exception: pass
     return target.name
 
