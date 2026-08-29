@@ -800,6 +800,59 @@ def do_preppack_selected():
         (done if r["ok"] else failed).append(a["company"])
     return dict(ok=True, msg=f"Prep packs built for {len(done)} selected role(s)"+(f"; issues: {', '.join(failed)}" if failed else "")+".")
 
+# ---- Behavioral Story Bank: your real STAR stories once, mapped to any question ----
+def _render_open(md_path, stem):
+    doc=f"<!doctype html><html><head><meta charset='utf-8'>{_PREP_CSS}</head><body>"+_md2html(read(md_path))+"</body></html>"
+    outhtml=CO/"interview-prep"/f"{stem}.html"; outhtml.write_text(doc); target=outhtml
+    if (CO/"generate-pdf.mjs").exists():
+        pdf=CO/"interview-prep"/f"{stem}.pdf"; ok,_g=run(["node","generate-pdf.mjs",str(outhtml),str(pdf),"--format=letter"],CO)
+        if ok:
+            cm=HERE.parent/"clean-markers.mjs"
+            if cm.exists(): run(["node",str(cm),"clean",str(pdf),"--author",(NAME or "Candidate")], cm.parent)
+            target=pdf
+    try: subprocess.Popen(["open", str(target)])
+    except Exception: pass
+    return target.name
+
+def do_story_bank():
+    key=load_key()
+    if not key: return dict(ok=False,msg="No OpenRouter key.")
+    cv=read(CO/"cv.md")[:5000]
+    sys=("Build a reusable BEHAVIORAL STORY BANK from the candidate's real CV, so they can answer ANY behavioral "
+         "interview question by mapping it to a story they actually lived. Extract 8-12 DISTINCT stories that span a "
+         "range of competencies. For EACH story use exactly this markdown:\n"
+         "### <short memorable title>\n"
+         "**Competencies:** 2-4 tags from {Leadership, Scaling Teams, Hiring/Retention, Conflict/Disagreement, "
+         "Influence without authority, Reliability/Incident, Cost/FinOps, Migration/Transformation, Delivery under "
+         "pressure, Failure/Learning, Stakeholder/Exec}\n"
+         "**Situation:** ...\n**Task:** ...\n**Action:** ...\n**Result:** ...\n"
+         "Ground EVERY story ONLY in the CV. Where a specific number or detail would strengthen it but is NOT in the "
+         "CV, insert [add your metric] or [add a specific example] — NEVER invent facts, metrics, or projects. "
+         +_ATTR_RULE+
+         " Cover diverse competencies so common questions each have a matching story: leading change, conflict, "
+         "failure/learning, influencing up, scaling a team, a hard cost-vs-reliability tradeoff, delivery under "
+         "pressure. First person, plain-ASCII, no [PERSON_NAME].\n"
+         "End with:\n## Question -> Story map\nA markdown table: | Behavioral question | Use this story | — 8-10 common "
+         "questions mapped to the best story above.")
+    usr=f"Candidate CV (the ONLY source of truth for facts):\n{cv}\n\nProduce the story bank + question-to-story map."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,3600)
+    except Exception as e: return dict(ok=False,msg=f"Failed: {e}")
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    out=CO/"interview-prep"/"story-bank.md"
+    out.write_text("# Behavioral Story Bank — grounded in your CV\n_(Your real STAR stories, tagged by competency. "
+                   "Master these ~10, then map any behavioral question to one. Personalize the [brackets].)_\n\n"+md+"\n")
+    prep_files.append(out.name)
+    n=md.count('### '); untraced=_untraced_metrics(md, read(CO/"cv.md"))
+    name=_render_open(out, "story-bank")
+    msg=f"Story Bank built ✓ — {n} stories ({name})"
+    msg+= (" · metrics all trace to your CV ✓" if not untraced else " · ⚠️ verify: "+", ".join(untraced[:6]))
+    return dict(ok=True,msg=msg)
+
+def do_open_story_bank():
+    f=CO/"interview-prep"/"story-bank.md"
+    if not f.exists(): return dict(ok=False,msg="No Story Bank yet — click '📖 Story Bank' to build it.")
+    return dict(ok=True,msg=f"Opened {_render_open(f,'story-bank')}")
+
 def do_brief(company):
     if not (company or "").strip(): return dict(ok=False,msg="No company.")
     key=load_key()
@@ -941,6 +994,7 @@ details summary{color:var(--accent2)}
   </div>
   <div class="htools">
     <button onclick="openSetup()" title="Enter your résumé, profile, and API key">🚀 Setup</button>
+    <button onclick="storyBank()" title="Build/open your behavioral STAR story bank from your CV">📖 Story Bank</button>
     <button onclick="openDraft()">✍️ Draft reply</button>
     <button class="p" onclick="doScan()">🔎 Scan</button>
     <button onclick="load()" title="Refresh">🔄</button>
@@ -1220,6 +1274,11 @@ function openDraft(){_openNum=null;
     '<div id="ddraft" style="display:none" class="draftbox"></div></div></div>';
   document.getElementById('drawer').classList.add('show');document.getElementById('scrim').classList.add('show');document.body.style.overflow='hidden';}
 
+function storyBank(){
+  if(confirm('Build (or rebuild) your behavioral Story Bank from your CV? ~40s.\\n\\nClick Cancel to just OPEN your existing one.'))
+    act('story_bank',{});
+  else act('open_story_bank',{});
+}
 function openSetup(){_openNum=null;
   var s=DATA.setup||{};
   function fld(id,label,ph,ta){return '<div class="sec"><div class="h">'+label+'</div>'+(ta?
@@ -1250,7 +1309,7 @@ async function saveSetup(){
 
 /* ---------- actions ---------- */
 var _busy={};
-var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs'};
+var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank'};
 var _longActive=null;   // only ONE long generation at a time — no overlapping tickers, no server overload
 async function act(kind,args){
   if(_busy[kind]){toast('Still working on that — one moment…');return}
@@ -1330,6 +1389,8 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/questions_all": self._send(200,json.dumps(do_questions_all()))
         elif p=="/api/preppack": self._send(200,json.dumps(do_preppack(args.get("num"))))
         elif p=="/api/preppack_selected": self._send(200,json.dumps(do_preppack_selected()))
+        elif p=="/api/story_bank": self._send(200,json.dumps(do_story_bank()))
+        elif p=="/api/open_story_bank": self._send(200,json.dumps(do_open_story_bank()))
         elif p=="/api/open_prep_pdf": self._send(200,json.dumps(do_open_prep_pdf(args.get("num"))))
         elif p=="/api/brief": self._send(200,json.dumps(do_brief(args.get("co",""))))
         elif p=="/api/mock_start":  self._send(200,json.dumps(do_mock_start(args.get("num"))))
