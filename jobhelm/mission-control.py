@@ -1784,6 +1784,6 @@ if __name__=="__main__":
     srv=ThreadingHTTPServer((HOST,PORT),H)
     print(f"JobHelm Mission Control → http://localhost:{PORT}  (bind {HOST}:{PORT}, Ctrl-C to stop)")
     if HOST in ("127.0.0.1","localhost"):
-        try: threading.Timer(0.8,lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
+        try: threading.Timer(0.8,lambda: webbrowser.open(f"http://127.0.0.1:{PORT}")).start()
         except Exception: pass
     srv.serve_forever()

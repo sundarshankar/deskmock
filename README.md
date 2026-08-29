@@ -111,7 +111,9 @@ Two ways to do the speech-to-text half:
 | Pressing Enter doesn't submit | A dictation tool is holding the keyboard. Toggle dictation **off**, click into the Terminal window, then press Enter. |
 | `OpenRouter key file not found` or auth errors | `export OPENROUTER_API_KEY=sk-or-...` in the **same** shell you run from, and confirm the key has credit. |
 | The echoed answer looks cut off | The `← read N chars` line reports the **full** captured length; the text shown after it is just a preview — your whole answer was captured. |
-| `python3: command not found` | Install Python 3.9+ (`brew install python` on macOS) and re-run `python3 --version`. |
+| `python3: command not found` | Install Python 3.9+ (`brew install python` on macOS) and re-run `python3 --version`. On **Windows** use `python` (not `python3`). |
+| JobHelm won't start: `OSError: [Errno 48] Address already in use` | Port 8899 is already taken — usually another JobHelm you left running. Free it, then start again:<br>**macOS/Linux:** `lsof -ti:8899 \| xargs kill -9`<br>**Windows (PowerShell):** `Get-Process -Id (Get-NetTCPConnection -LocalPort 8899).OwningProcess \| Stop-Process -Force`<br>…or just run on another port: `JOBHELM_PORT=8900 python3 jobhelm/mission-control.py`. |
+| JobHelm shows the **demo board** (Alex Rivera / Datawright), not your data | You're running it without pointing at your career-ops. Set `JOBHELM_CAREEROPS=/path/to/your/career-ops` (or run from your own career-ops checkout). With no path it defaults to the bundled `sample-data`. |
 
 ## Keep your output clean
 
