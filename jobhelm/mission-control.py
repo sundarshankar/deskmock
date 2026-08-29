@@ -544,9 +544,10 @@ def do_mock_finish(num, history):
         saved=f"(save failed: {e})"
     return dict(ok=True, scorecard=card, saved=saved)
 
-def _llm(msgs, key, max_tokens=900, model=None, json_mode=False):
+def _llm(msgs, key, max_tokens=900, model=None, json_mode=False, web=False):
     payload={"model":(model or "deepseek/deepseek-v3.2"),"temperature":0.5,"max_tokens":max_tokens,"messages":msgs}
     if json_mode: payload["response_format"]={"type":"json_object"}
+    if web: payload["plugins"]=[{"id":"web","max_results":6}]
     body=json.dumps(payload).encode()
     req=urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",data=body,
         headers={"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"JobHelm"})
@@ -685,18 +686,33 @@ def _gen_articles_for(a):
     key=load_key()
     if not key: return (False,"no key")
     jd,jdsrc=_jd_text_for(a)
-    sys=("You build a STACK READING GUIDE so a candidate sounds current in a technical interview. "
-         "From the role (and JD if given), identify the 5-7 key technologies/practices that matter (e.g. Kubernetes, "
-         "Terraform/IaC, service mesh, observability/SRE, FinOps, CI/CD, cloud platform). For EACH: **what to be "
-         "current on** (one line) and **why it matters for THIS role** (one line). Then a short **'go deeper'** list "
-         "of search queries the candidate should run for THIS WEEK's articles (do NOT fabricate specific headlines, "
-         "dates, or URLs — you cannot see live news; give the search query instead). Plain-ASCII, no name placeholder.")
-    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+"Produce the stack reading guide."
-    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2200)
-    except Exception as e: return (False,str(e))
+    web=os.environ.get("JOBHELM_WEB","1")!="0"   # live article fetch via OpenRouter web search (set 0 to disable)
+    if web:
+        sys=("You build a STACK READING GUIDE so a candidate sounds current in a technical interview. Use the WEB "
+             "SEARCH RESULTS available to you to find REAL, RECENT articles. From the role (and JD if given), pick "
+             "the 5-7 key technologies/practices that matter (Kubernetes, IaC/Terraform, service mesh, observability/"
+             "SRE, FinOps, CI/CD, platform engineering, AI infra). For EACH: **what to be current on** (one line), "
+             "**why it matters for THIS role** (one line), and **1-2 recent articles** as markdown links "
+             "[title](url). Cite ONLY genuine technical sources — engineering blogs, project docs, conference "
+             "talks, or news ABOUT THE TECHNOLOGY. NEVER cite a job listing, recruiting site, or a company "
+             "careers/greenhouse/lever page — those are not articles; discard them. Use only real URLs the search "
+             "returned; if you found no genuine technical article for a topic, write 'Search: <query>' instead of "
+             "inventing a link. Never fabricate a URL, headline, or date. Plain-ASCII, no name placeholder.")
+    else:
+        sys=("You build a STACK READING GUIDE so a candidate sounds current in a technical interview. "
+             "From the role (and JD if given), identify the 5-7 key technologies/practices that matter. For EACH: "
+             "**what to be current on** (one line) and **why it matters for THIS role** (one line). Then a short "
+             "**'go deeper'** list of search queries to run for THIS WEEK's articles (do NOT fabricate headlines, "
+             "dates, or URLs — give the search query instead). Plain-ASCII, no name placeholder.")
+    usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+"Produce the stack reading guide with recent real articles."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2400,web=web)
+    except Exception:
+        try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2200)  # fall back w/o web
+        except Exception as e: return (False,str(e))
     md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
     out=CO/"interview-prep"/f"{slug(company)}-articles.md"
-    out.write_text(f"# Stack & articles — {role} @ {company}\n_(key topics to be current on{' from '+jdsrc if jd else ''}. Run the search queries for this week's writing.)_\n\n{md}\n\n## Curated technical, SRE & system-design resources\n{_reslinks('technical','system')}\n")
+    sub="recent real articles fetched live" if web else "run the search queries for this week's writing"
+    out.write_text(f"# Stack & articles — {role} @ {company}\n_(key topics to be current on{' from '+jdsrc if jd else ''}; {sub}.)_\n\n{md}\n\n## Curated technical, SRE & system-design resources\n{_reslinks('technical','system')}\n")
     prep_files.append(out.name)
     return (True,out.name)
 
