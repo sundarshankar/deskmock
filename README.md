@@ -152,8 +152,9 @@ DeskMock + JobHelm stand on a lot of excellent open-source work — thank you to
 **Integrates / builds on**
 - [JobSpy](https://github.com/speedyapply/JobSpy) — LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google scraping (the aggregator leg of 🔎 Scan)
 - [OpenRouter](https://openrouter.ai) — default LLM gateway (any OpenAI-compatible endpoint works); [DeepSeek](https://www.deepseek.com) is the default model, and OpenRouter's web plugin powers live article fetch
-- [Playwright](https://playwright.dev) — HTML→PDF rendering for résumés and prep docs
-- [pdf-lib](https://github.com/Hopding/pdf-lib) — metadata stripping in `clean-markers.mjs`
+- [pdf-lib](https://github.com/Hopding/pdf-lib) — metadata stripping in `clean-markers.mjs` (auto-installed on demand)
+- [Playwright](https://playwright.dev) — HTML→PDF rendering, used via career-ops' `generate-pdf.mjs` when present
+- macOS built-ins (`say`, dictation, clipboard) for DeskMock's read-aloud voice
 
 **Curated interview-prep resources** — the prep hub points to community lists and guides (full set in [PREP-RESOURCES.md](PREP-RESOURCES.md)). Thanks to their maintainers, including
 [dastergon/awesome-sre](https://github.com/dastergon/awesome-sre),
