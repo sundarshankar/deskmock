@@ -283,7 +283,7 @@ def build_state():
                    interviewing=cnt("Interview","Responded"),offers=cnt("Offer","Hired"),
                    newmatches=len(pipe),prep_avg=avg,mock=nm),
         pipeline=pipeline, new_matches=pipe, next_actions=na, standing_gaps=sg,
-        profile=profile(), scan=scan_coverage(), setup=setup_status(),
+        profile=profile(), scan=scan_coverage(), setup=setup_status(), readiness=readiness_summary(),
         ignored=list(reversed(_ignored_rows()))[:40],
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -523,9 +523,12 @@ def do_mock_finish(num, history):
     key=load_key()
     if not key: return dict(ok=False,msg="No OpenRouter key.")
     msgs,a=_mock_messages(num,history)
-    msgs.append({"role":"user","content":"The interview is over. Give me the SCORECARD now."})
+    msgs.append({"role":"user","content":"The interview is over. Give me the SCORECARD now — strengths, gaps, and "
+        "concrete next steps. End with EXACTLY this line (integers 1-5): "
+        "SCORES: Leadership n/5 | Technical n/5 | Behavioral n/5 | Communication n/5"})
     try: card=_llm(msgs,key,900)
     except Exception as e: return dict(ok=False,msg=f"Scorecard failed: {e}")
+    _record_readiness(a["company"] if a else "role", card)
     saved=""
     try:
         lines=[f'**{"Interviewer" if h.get("role")=="assistant" else "You"}:** {h.get("content","")}'
@@ -850,6 +853,60 @@ def do_story_bank():
     msg+= (" · metrics all trace to your CV ✓" if not untraced else " · ⚠️ verify: "+", ".join(untraced[:6]))
     return dict(ok=True,msg=msg)
 
+# ---- adaptive readiness: rehearse -> per-dimension score -> drill the weakest ----
+DIMS_SCORE=["Leadership","Technical","Behavioral","Communication"]
+def _record_readiness(company, card):
+    m=re.search(r'SCORES:\s*(.+)', card or "")
+    if not m: return
+    rows=[]
+    for dim in DIMS_SCORE:
+        mm=re.search(dim+r'\s*[:=]?\s*(\d(?:\.\d)?)\s*/\s*5', m.group(1), re.I)
+        if mm: rows.append((dim, mm.group(1)))
+    if not rows: return
+    f=CO/"data"/"readiness.tsv"; f.parent.mkdir(parents=True,exist_ok=True)
+    ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    with f.open("a") as fh:
+        for dim,sc in rows: fh.write(f"{ts}\t{slug(company)}\t{dim}\t{sc}\n")
+
+def readiness_summary():
+    hist={d:[] for d in DIMS_SCORE}
+    for ln in read(CO/"data"/"readiness.tsv").splitlines():
+        c=ln.split("\t")
+        if len(c)>=4 and c[2] in hist:
+            try: hist[c[2]].append(float(c[3]))
+            except Exception: pass
+    dims=[]
+    for d in DIMS_SCORE:
+        h=hist[d]
+        if not h: dims.append(dict(dim=d,score=None,reps=0,trend=0,spark=[]))
+        else: dims.append(dict(dim=d,score=round(sum(h)/len(h),1),latest=h[-1],reps=len(h),
+                               trend=round(h[-1]-h[0],1) if len(h)>1 else 0,spark=h[-8:]))
+    scored=[x for x in dims if x["reps"]>0]
+    weakest=min(scored,key=lambda x:x["score"])["dim"] if scored else None
+    return dict(dims=dims, weakest=weakest, total_reps=sum(x["reps"] for x in dims))
+
+
+def do_drill(dim=""):
+    key=load_key()
+    if not key: return dict(ok=False,msg="No OpenRouter key.")
+    dim=dim if dim in DIMS_SCORE else (readiness_summary().get("weakest") or "Behavioral")
+    cv=read(CO/"cv.md")[:3500]
+    sys=(f"The candidate scores WEAKEST at {dim} in mock interviews, so drill it hard. Generate 6 ESCALATING {dim} "
+         "questions — tougher and more probing than a normal set. For EACH: **Question**; **Model answer** grounded "
+         "ONLY in the candidate's real CV (STAR for behavioral/leadership; structured technical for technical); "
+         "**Interviewer follow-up** that pressure-tests depth. "+_ATTR_RULE+"Never invent facts; use [add your metric]/"
+         "[add a specific example] for gaps. First person, plain-ASCII, no [PERSON_NAME].")
+    usr=f"Dimension to drill: {dim}.\n\nCandidate CV (only source of truth):\n{cv}\n\nProduce the escalated {dim} drill."
+    try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2800)
+    except Exception as e: return dict(ok=False,msg=f"Failed: {e}")
+    md=re.sub(r'\[(?:person[_ ]?name|candidate[_ ]?name|your[_ ]?name|full[_ ]?name|name)\]','',md,flags=re.I)
+    out=CO/"interview-prep"/f"drill-{slug(dim)}.md"
+    out.write_text(f"# {dim} drill — escalated (your weakest area)\n_(harder probing questions + model answers, "
+                   f"grounded in your CV. Rehearse these, then re-mock to lift your {dim} score.)_\n\n{md}\n")
+    prep_files.append(out.name)
+    name=_render_open(out, f"drill-{slug(dim)}")
+    return dict(ok=True, msg=f"🎯 {dim} drill generated + opened ({name}) — your weakest area. Rehearse, then re-mock to raise the score.")
+
 def do_open_story_bank():
     f=CO/"interview-prep"/"story-bank.md"
     if not f.exists(): return dict(ok=False,msg="No Story Bank yet — click '📖 Story Bank' to build it.")
@@ -1058,6 +1115,7 @@ details summary{color:var(--accent2)}
   <div class="main">
     <div class="board" id="board"></div>
     <div class="rail">
+      <div class="panel"><h2>🎯 Interview readiness</h2><div id="readiness"></div></div>
       <div class="panel"><h2>🔥 Next best actions</h2><ul class="na" id="na"></ul></div>
       <div class="panel"><h2>📌 Standing gaps · study focus</h2><ul class="glist" id="gaps"></ul></div>
     </div>
@@ -1142,6 +1200,7 @@ async function load(){
        :a.kind==='review'?'<button class="sm b" onclick="view(\\'discover\\')">Review</button>'
        :a.kind==='prep'&&a.co?'<button class="sm b" onclick="genForCo(\\''+encodeURIComponent(a.co)+'\\')">Prep</button>':'';
     return '<li><span>'+esc(a.label)+'</span>'+b+'</li>'}).join('')||'<li class="muted">All clear.</li>';
+  renderReadiness();
   document.getElementById('gaps').innerHTML=(DATA.standing_gaps.length?DATA.standing_gaps:['Run a gap analysis to populate this.']).map(function(g){return '<li>'+esc(g)+'</li>'}).join('');
   // discover
   document.getElementById('nm').innerHTML=(DATA.new_matches.length?DATA.new_matches:[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
@@ -1191,6 +1250,22 @@ function card(p){
   '</div>';
 }
 
+function renderReadiness(){
+  var r=(DATA.readiness)||{dims:[],weakest:null,total_reps:0};
+  var el=document.getElementById('readiness'); if(!el)return;
+  if(!r.total_reps){el.innerHTML='<div class="sm muted">No reps yet. Rehearse a role (🎤 Rehearse here → Finish → scorecard) and your per-dimension readiness charts here — then drill your weakest.</div>';return}
+  var rows=r.dims.map(function(d){
+    if(!d.reps)return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span style="min-width:96px;font-size:13px">'+d.dim+'</span><span class="sm muted">no reps</span></div>';
+    var pct=Math.round((d.score/5)*100), col=d.score>=4?'var(--accent)':d.score>=3?'var(--amber)':'#ff6b6b';
+    var tr=d.trend>0?'▲ +'+d.trend:(d.trend<0?'▼ '+d.trend:'–');
+    var wk=(d.dim===r.weakest)?' <span style="color:#ff6b6b;font-size:10px;text-transform:uppercase">weakest</span>':'';
+    return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span style="min-width:96px;font-size:13px">'+d.dim+wk+'</span>'+
+      '<span style="flex:1;height:7px;background:var(--line);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:'+pct+'%;background:'+col+'"></i></span>'+
+      '<span style="font-size:12px;min-width:26px">'+d.score+'/5</span><span class="sm muted" style="min-width:56px;text-align:right">'+tr+' · '+d.reps+'r</span></div>';
+  }).join('');
+  var btn=r.weakest?'<button class="sm p" style="margin-top:9px" onclick="if(confirm(\\'Generate an escalated '+r.weakest+' drill (your weakest area)? ~40s\\'))act(\\'drill\\',{dim:\\''+r.weakest+'\\'})">🎯 Drill weakest — '+r.weakest+'</button>':'';
+  el.innerHTML=rows+btn;
+}
 function renderBoard(){
   var q=(document.getElementById('q').value||'').toLowerCase();
   var cols=STAGES.filter(function(st){return FILTER===null||FILTER===st[0]});
@@ -1355,7 +1430,7 @@ async function saveSetup(){
 
 /* ---------- actions ---------- */
 var _busy={};
-var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank'};
+var _LONG={questions:'Generating questions + answers',preppack:'Building prep pack (questions + leadership + articles)',open_prep_pdf:'Opening prep pack',questions_all:'Generating question sets',preppack_selected:'Building prep packs',story_bank:'Building your behavioral story bank',drill:'Building your escalated drill',flashcards:'Building flashcards'};
 var _longActive=null;   // only ONE long generation at a time — no overlapping tickers, no server overload
 async function act(kind,args){
   if(_busy[kind]){toast('Still working on that — one moment…');return}
@@ -1490,6 +1565,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/story_bank": self._send(200,json.dumps(do_story_bank()))
         elif p=="/api/open_story_bank": self._send(200,json.dumps(do_open_story_bank()))
         elif p=="/api/flashcards": self._send(200,json.dumps(do_flashcards()))
+        elif p=="/api/drill": self._send(200,json.dumps(do_drill(args.get("dim",""))))
         elif p=="/api/open_prep_pdf": self._send(200,json.dumps(do_open_prep_pdf(args.get("num"))))
         elif p=="/api/brief": self._send(200,json.dumps(do_brief(args.get("co",""))))
         elif p=="/api/mock_start":  self._send(200,json.dumps(do_mock_start(args.get("num"))))
