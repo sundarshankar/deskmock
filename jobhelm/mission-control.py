@@ -541,8 +541,10 @@ def do_mock_finish(num, history):
         saved=f"(save failed: {e})"
     return dict(ok=True, scorecard=card, saved=saved)
 
-def _llm(msgs, key, max_tokens=900):
-    body=json.dumps({"model":"deepseek/deepseek-v3.2","temperature":0.5,"max_tokens":max_tokens,"messages":msgs}).encode()
+def _llm(msgs, key, max_tokens=900, model=None, json_mode=False):
+    payload={"model":(model or "deepseek/deepseek-v3.2"),"temperature":0.5,"max_tokens":max_tokens,"messages":msgs}
+    if json_mode: payload["response_format"]={"type":"json_object"}
+    body=json.dumps(payload).encode()
     req=urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",data=body,
         headers={"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"JobHelm"})
     with urllib.request.urlopen(req,timeout=90) as r:
@@ -853,6 +855,49 @@ def do_open_story_bank():
     if not f.exists(): return dict(ok=False,msg="No Story Bank yet — click '📖 Story Bank' to build it.")
     return dict(ok=True,msg=f"Opened {_render_open(f,'story-bank')}")
 
+def flashcards_data():
+    f=CO/"interview-prep"/"flashcards.json"
+    if not f.exists(): return {"cards":[]}
+    try: return {"cards": json.loads(read(f))}
+    except Exception: return {"cards":[]}
+
+def do_flashcards():
+    key=load_key()
+    if not key: return dict(ok=False,msg="No OpenRouter key.")
+    cv=read(CO/"cv.md")[:5000]
+    sb=CO/"interview-prep"/"story-bank.md"
+    sbtxt=("\n\nSTORY BANK (use titles as answers to behavioral triggers):\n"+read(sb)[:2500]) if sb.exists() else ""
+    sys=("Build a deck of 24 interview FLASHCARDS for active-recall practice, grounded ONLY in the candidate's CV. "
+         "Return a JSON object {\"cards\":[{\"front\":\"...\",\"back\":\"...\",\"dim\":\"fact|behavioral|technical\"}]}. Mix:\n"
+         "- ~10 'recall your own numbers' cards (dim=fact): front asks for a specific fact/metric from the CV, back is "
+         "the EXACT figure (e.g. front 'eHealth data-center migration time & efficiency gain?' back '11 months, +38%').\n"
+         "- ~7 behavioral-trigger cards (dim=behavioral): front is a behavioral question type, back names the best "
+         "story + a one-line STAR skeleton.\n"
+         "- ~7 technical-concept cards (dim=technical): front a concept/term central to the candidate's domain "
+         "(SRE, Kubernetes, FinOps, IaC, service mesh, incident mgmt), back a crisp 1-2 line explanation.\n"
+         "CRITICAL: never invent facts, metrics, employers, or projects — every 'fact' back must come from the CV. "
+         "Keep fronts short (a prompt), backs tight (1-3 lines). Plain-ASCII, no [PERSON_NAME]. JSON only.")
+    usr=f"Candidate CV (the ONLY source of truth):\n{cv}{sbtxt}\n\nProduce the flashcard JSON."
+    try:
+        raw=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,3200,json_mode=True)
+        cards=json.loads(raw).get("cards",[])
+    except Exception as e:
+        return dict(ok=False,msg=f"Failed: {e}")
+    # tag ids + scrub
+    clean=[]
+    for i,c in enumerate(cards):
+        if not (c.get("front") and c.get("back")): continue
+        c["id"]=f"c{i}"; c["dim"]=c.get("dim","fact")
+        for k in ("front","back"): c[k]=re.sub(r'\[(?:person[_ ]?name|your[_ ]?name|name)\]','',str(c[k]),flags=re.I).strip()
+        clean.append({"id":c["id"],"front":c["front"],"back":c["back"],"dim":c["dim"]})
+    if not clean: return dict(ok=False,msg="No cards generated — try again.")
+    (CO/"interview-prep"/"flashcards.json").write_text(json.dumps(clean,indent=1))
+    untraced=_untraced_metrics(" ".join(c["back"] for c in clean if c["dim"]=="fact"), read(CO/"cv.md"))
+    msg=f"Flashcards built ✓ — {len(clean)} cards. Open 🃏 Flashcards to study (spaced repetition)."
+    msg+= (" · fact metrics all trace ✓" if not untraced else " · ⚠️ verify fact cards: "+", ".join(untraced[:6]))
+    return dict(ok=True,msg=msg)
+
+
 def do_brief(company):
     if not (company or "").strip(): return dict(ok=False,msg="No company.")
     key=load_key()
@@ -995,6 +1040,7 @@ details summary{color:var(--accent2)}
   <div class="htools">
     <button onclick="openSetup()" title="Enter your résumé, profile, and API key">🚀 Setup</button>
     <button onclick="storyBank()" title="Build/open your behavioral STAR story bank from your CV">📖 Story Bank</button>
+    <button onclick="window.open('/flashcards','_blank')" title="Spaced-repetition flashcards from your CV">🃏 Flashcards</button>
     <button onclick="openDraft()">✍️ Draft reply</button>
     <button class="p" onclick="doScan()">🔎 Scan</button>
     <button onclick="load()" title="Refresh">🔄</button>
@@ -1356,6 +1402,56 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDrawer(
 load();
 </script></body></html>"""
 
+FLASHCARDS_PAGE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JobHelm Flashcards</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--line:#2a2f3a;--fg:#e6e9ef;--muted:#8a92a3;--accent:#3ecf8e;--amber:#e0a63e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px}
+.top{width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px}
+.top a{color:var(--muted);text-decoration:none;font-size:13px}
+h1{font-size:18px;margin:0}
+.stats{display:flex;gap:14px;font-size:13px;color:var(--muted)}.stats b{color:var(--fg)}
+.card{width:100%;max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:260px;display:flex;flex-direction:column;justify-content:center;padding:34px;cursor:pointer;font-size:18px;line-height:1.55;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.dim{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+.back{border-top:1px dashed var(--line);margin-top:18px;padding-top:16px}
+.hint{color:var(--muted);font-size:13px;text-align:center;margin-top:14px}
+.grades{display:flex;gap:10px;width:100%;max-width:640px;margin-top:16px}
+.grades button{flex:1;padding:12px;border-radius:10px;border:1px solid var(--line);background:#20242c;color:var(--fg);font-size:14px;cursor:pointer}
+.grades button:hover{border-color:var(--accent)}
+.g0{color:#ff6b6b}.g3{color:var(--amber)}.g4{color:var(--accent)}.g5{color:#5ec8ff}
+.done{text-align:center;margin-top:56px;color:var(--muted);max-width:520px}.done b{color:var(--accent);font-size:20px}
+button.b{background:var(--accent);color:#06231a;border:none;padding:10px 18px;border-radius:9px;cursor:pointer;font-weight:600;margin-top:10px}
+</style></head><body>
+<div class="top"><h1>🃏 Flashcards</h1><div class="stats" id="stats"></div><div><a href="#" onclick="build();return false">rebuild</a> &nbsp; <a href="/">← board</a></div></div>
+<div id="app"></div>
+<script>
+var CARDS=[],queue=[],cur=null,shown=false,reviewed=0,LS='jobhelm_srs_v1';
+function state(){try{return JSON.parse(localStorage.getItem(LS)||'{}')}catch(e){return {}}}
+function save(s){try{localStorage.setItem(LS,JSON.stringify(s))}catch(e){}}
+function today(){return Math.floor(Date.now()/864e5)}
+function due(c){var s=state()[c.id];return !s||s.due<=today()}
+function sm2(id,q){var s=state(),c=s[id]||{ease:2.5,int:0,reps:0};
+  if(q<3){c.reps=0;c.int=1;}else{c.reps++;c.int=c.reps==1?1:c.reps==2?6:Math.round(c.int*c.ease);c.ease=Math.max(1.3,c.ease+(0.1-(5-q)*(0.08+(5-q)*0.02)));}
+  c.due=today()+c.int;s[id]=c;save(s);}
+function stats(){var s=state(),d=0,nw=0,l=0;CARDS.forEach(function(c){var x=s[c.id];if(!x)nw++;else if(x.due<=today())d++;if(x&&x.reps>=2)l++;});
+  document.getElementById('stats').innerHTML='<span>due <b>'+d+'</b></span><span>new <b>'+nw+'</b></span><span>learned <b>'+l+'/'+CARDS.length+'</b></span>';}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function next(){shown=false;cur=queue.shift();if(!cur){doneScreen();return}render();}
+function render(){var dl={fact:'Recall your fact',behavioral:'Behavioral trigger',technical:'Technical concept'}[cur.dim]||cur.dim;
+  document.getElementById('app').innerHTML='<div class="card" onclick="flip()"><div class="dim">'+dl+'</div><div>'+esc(cur.front)+'</div>'+(shown?'<div class="back">'+esc(cur.back)+'</div>':'')+'</div>'+(shown?'<div class="grades"><button class="g0" onclick="grade(0)">Again</button><button class="g3" onclick="grade(3)">Hard</button><button class="g4" onclick="grade(4)">Good</button><button class="g5" onclick="grade(5)">Easy</button></div>':'<div class="hint">click card to reveal · space to flip · 1-4 to grade</div>');stats();}
+function flip(){shown=true;render();}
+function grade(q){sm2(cur.id,q);reviewed++;next();}
+function doneScreen(){document.getElementById('app').innerHTML='<div class="done"><b>✓ Session complete</b><p>You reviewed '+reviewed+' cards. Spaced-repetition will resurface the hard ones sooner.</p><button class="b" onclick="start(true)">Study all again</button></div>';stats();}
+function start(all){reviewed=0;queue=shuffle(CARDS.filter(all?function(){return true}:due));
+  if(!queue.length){document.getElementById('app').innerHTML='<div class="done"><b>All caught up 🎉</b><p>No cards due today — spaced repetition is working.</p><button class="b" onclick="start(true)">Review all anyway</button></div>';stats();return}next();}
+function build(){document.getElementById('app').innerHTML='<div class="done">Building your deck from your CV… ~40s</div>';
+  fetch('/api/flashcards',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){location.reload();}else{document.getElementById('app').innerHTML='<div class="done">'+esc(d.msg||'Failed')+'<br><button class="b" onclick="build()">Retry</button></div>';}});}
+document.addEventListener('keydown',function(e){if(e.code==='Space'){e.preventDefault();if(!shown&&cur)flip();}else if(shown&&cur){if(e.key==='1')grade(0);else if(e.key==='2')grade(3);else if(e.key==='3')grade(4);else if(e.key==='4')grade(5);}});
+fetch('/api/flashcards_data').then(function(r){return r.json()}).then(function(d){CARDS=d.cards||[];
+  if(!CARDS.length){document.getElementById('app').innerHTML='<div class="done">No flashcards yet.<p>Build a deck from your CV — 24 active-recall cards (your metrics, behavioral triggers, technical concepts).</p><button class="b" onclick="build()">Build my deck (~40s)</button></div>';stats();return}start(false);});
+</script></body></html>"""
+
 class H(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def _send(self,code,body,ct="application/json"):
@@ -1365,7 +1461,9 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         p=urlparse(self.path).path
         if p=="/": self._send(200,PAGE,"text/html")
+        elif p=="/flashcards": self._send(200,FLASHCARDS_PAGE,"text/html")
         elif p=="/api/data": self._send(200,json.dumps(build_state()))
+        elif p=="/api/flashcards_data": self._send(200,json.dumps(flashcards_data()))
         else: self._send(404,"{}")
     def do_POST(self):
         p=urlparse(self.path).path
@@ -1391,6 +1489,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/preppack_selected": self._send(200,json.dumps(do_preppack_selected()))
         elif p=="/api/story_bank": self._send(200,json.dumps(do_story_bank()))
         elif p=="/api/open_story_bank": self._send(200,json.dumps(do_open_story_bank()))
+        elif p=="/api/flashcards": self._send(200,json.dumps(do_flashcards()))
         elif p=="/api/open_prep_pdf": self._send(200,json.dumps(do_open_prep_pdf(args.get("num"))))
         elif p=="/api/brief": self._send(200,json.dumps(do_brief(args.get("co",""))))
         elif p=="/api/mock_start":  self._send(200,json.dumps(do_mock_start(args.get("num"))))
