@@ -153,8 +153,12 @@ DeskMock + JobHelm stand on a lot of excellent open-source work — thank you to
 - [JobSpy](https://github.com/speedyapply/JobSpy) — LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google scraping (the aggregator leg of 🔎 Scan)
 - [OpenRouter](https://openrouter.ai) — default LLM gateway (any OpenAI-compatible endpoint works); [DeepSeek](https://www.deepseek.com) is the default model, and OpenRouter's web plugin powers live article fetch
 - [pdf-lib](https://github.com/Hopding/pdf-lib) — metadata stripping in `clean-markers.mjs` (auto-installed on demand)
-- [Playwright](https://playwright.dev) — HTML→PDF rendering, used via career-ops' `generate-pdf.mjs` when present
 - macOS built-ins (`say`, dictation, clipboard) for DeskMock's read-aloud voice
+
+**Transitive — via career-ops scripts we shell out to** (Scan, Mark-applied, résumé/prep PDFs):
+- [Playwright](https://playwright.dev) — HTML→PDF rendering (`generate-pdf.mjs`)
+- [js-yaml](https://github.com/nodeca/js-yaml) — YAML config parsing (`scan.mjs`, `set-status.mjs`)
+- career-ops carries its own dependency tree (also `@google/generative-ai`, `dotenv`, …) — see its [package.json](https://github.com/santifer/career-ops/blob/main/package.json). Thanks to all those maintainers too.
 
 **Curated interview-prep resources** — the prep hub points to community lists and guides (full set in [PREP-RESOURCES.md](PREP-RESOURCES.md)). Thanks to their maintainers, including
 [dastergon/awesome-sre](https://github.com/dastergon/awesome-sre),
