@@ -91,7 +91,23 @@ Runs the sample board by default. Mount your own career-ops / DeskMock and set `
 | `JOBHELM_LOCATIONS` | `remote\|anywhere\|united states\|us` | regex of location keywords to keep in Discover |
 | `JOBHELM_PORT` / `JOBHELM_HOST` | `8899` / `127.0.0.1` | where the server binds |
 | `JOBHELM_JOBSPY` | — | path to a Python with [JobSpy](https://github.com/speedyapply/JobSpy) installed (`pip install python-jobspy`); enables the LinkedIn/Indeed/etc. leg of 🔎 Scan |
-| `OPENROUTER_API_KEY` | — | your LLM key (or drop an `openrouter.env` next to the script) |
+| `OPENROUTER_API_KEY` / `JOBHELM_API_KEY` | — | your LLM key (or drop an `openrouter.env` next to the script) |
+| `JOBHELM_BASE_URL` | OpenRouter | any **OpenAI-compatible** API base (Gemini free tier, OpenAI, Ollama/vLLM). Model IDs must match that provider. |
+| `JOBHELM_MODEL` / `JOBHELM_RESUME_MODEL` | deepseek / gpt-4o-mini | model per task — cheap default for bulk prep, a stronger one for résumés |
+
+### Use a different provider (e.g. Gemini's free tier)
+
+JobHelm speaks any OpenAI-compatible endpoint. To run it **free** on Google's Gemini (grab a key at [aistudio.google.com](https://aistudio.google.com)):
+
+```bash
+export JOBHELM_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai"
+export JOBHELM_API_KEY="your-gemini-key"
+export JOBHELM_MODEL="gemini-2.5-flash"
+export JOBHELM_RESUME_MODEL="gemini-2.5-flash"
+python3 jobhelm/mission-control.py
+```
+
+The default stays OpenRouter (`deepseek-v3.2`). Live-article web search is an OpenRouter feature; on other providers the articles guide falls back to search-queries.
 
 ## How it relates to career-ops and DeskMock
 
