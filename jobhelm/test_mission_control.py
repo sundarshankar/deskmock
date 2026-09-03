@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """JobHelm — unit/logic tests against the bundled sample data. No side effects
 (Terminal launch is stubbed; no LLM/network calls)."""
-import os, sys, importlib.util, pathlib, datetime
+import os, sys, importlib.util, pathlib, datetime, subprocess
+_REAL_POPEN = subprocess.Popen   # tests below stub Popen; keep the real one for node --check
 
 HERE = pathlib.Path(__file__).resolve().parent
 # Point the app at the bundled sample data BEFORE import (module reads env at import time).
@@ -148,6 +149,46 @@ check("every row carries a stable role key", all(r.get("key") for r in _rows))
 check("agencies never outrank a real employer",
       [r["agency"] for r in _rows] == sorted((r["agency"] for r in _rows), key=lambda a: (a,))
       or all(r["is_new"] for r in _rows if r["agency"]))
+
+print("== Apply queue: prepare in bulk, submit one at a time ==")
+check("Greenhouse's current host is recognised", mc.ats_of("https://job-boards.greenhouse.io/x/jobs/1") == "greenhouse")
+check("the older Greenhouse host still works", mc.ats_of("https://boards.greenhouse.io/x/jobs/1") == "greenhouse")
+for _u, _want in (("https://jobs.lever.co/a/b","lever"), ("https://jobs.ashbyhq.com/a/b","ashby"),
+                  ("https://x.wd5.myworkdayjobs.com/y","workday"), ("https://x.icims.com/j/1","icims")):
+    check(f"ATS detected: {_want}", mc.ats_of(_u) == _want)
+check("an unknown host reports no ATS rather than guessing", mc.ats_of("https://example.com/job") == "")
+
+_ev = next((a for a in mc.apps() if a["status"].lower() == "evaluated"), None)
+if _ev:
+    _name, _warn = mc._apply_pack(_ev, "")           # no key: answers fall back, pack still written
+    _pack = mc.APPLY_DIR / _name
+    _body = mc.read(_pack)
+    check("an application pack is written", _pack.exists(), _name)
+    check("the pack carries the submit checklist", "Before you click Submit" in _body)
+    check("the pack flags a missing résumé rather than pretending", any("résumé" in w for w in _warn), str(_warn))
+    check("the role is queued for review", any(q["num"] == _ev["num"] for q in mc.apply_queue()))
+    _pack.unlink()
+check("an applied role is not re-queued",
+      not any(q["num"] == a["num"] for q in mc.apply_queue() for a in mc.apps() if a["status"].lower() == "applied"))
+check("prepare_batch refuses an empty selection", mc.do_prepare_batch([])["ok"] is False)
+check("prepare_batch caps a runaway batch", mc.do_prepare_batch([{"company":"C","title":"T"}]*51)["ok"] is False)
+
+print("== the page's JavaScript actually parses (escaping guard) ==")
+# PAGE is a non-raw Python string, so a JS escape written with one backslash is
+# eaten before the browser sees it. That has broken this page three separate ways
+# (lone surrogates, quote escapes, \n inside the bookmarklet), and each time
+# Python imported happily and served a blank screen. Parse it for real.
+import shutil, tempfile, re as _re
+subprocess.Popen = _REAL_POPEN          # undo the launcher stub so node can actually run
+if shutil.which("node"):
+    _js = max(_re.findall(r"<script>(.*?)</script>", mc.PAGE, _re.S), key=len)
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as _f:
+        _f.write(_js); _pathjs = _f.name
+    _r = subprocess.run(["node", "--check", _pathjs], capture_output=True, text=True)
+    check("the dashboard's inline JS parses", _r.returncode == 0, _r.stderr[:200])
+    os.unlink(_pathjs)
+else:
+    print("  skip node --check (node not installed)")
 
 print(f"\n==== {PASS} passed, {FAIL} failed ====")
 sys.exit(1 if FAIL else 0)

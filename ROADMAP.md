@@ -54,6 +54,9 @@ _Status:_ ATS ✅ · JobSpy ✅ (activated — LinkedIn/Indeed/etc. now feed the
 
 ### 2. Apply & connect
 - Assisted apply (pre-fill fields, attach the right résumé; human clicks submit).
+- **Apply queue** — prepare N applications in one pass, then work them one screen at a time; per-ATS autofill
+  (Greenhouse · Lever · Ashby · Workday · Workable · SmartRecruiters, plus a generic label pass) that reports
+  every required field it would not answer for you.
 - **Customized résumé** per role, ATS-safe and human-clean.
 - Recruiter/HM **outreach + reply drafting** (human reviews and sends).
 

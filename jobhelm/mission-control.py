@@ -597,7 +597,7 @@ def build_state():
                    newmatches=pipe_meta["total"],prep_avg=avg,mock=nm),
         pipeline=pipeline, new_matches=pipe, next_actions=na, standing_gaps=sg,
         profile=profile(), scan=scan_coverage(), setup=setup_status(), readiness=readiness_summary(),
-        new_hidden=pipe_hidden, new_meta=pipe_meta,
+        new_hidden=pipe_hidden, new_meta=pipe_meta, apply_queue=apply_queue(),
         ignored=list(reversed(_ignored_rows()))[:40],
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -676,6 +676,168 @@ def do_discard(num):
 def do_reject(num):
     ok,out=run(["node","set-status.mjs",str(num),"Rejected","--note","Marked Rejected via JobHelm"],CO)
     return dict(ok=ok, msg="Marked Rejected ✓ — removed from the active board." if ok else f"Failed: {out[-200:]}")
+
+# ---------- Apply Queue: prepare in bulk, submit one at a time ----------
+# The bottleneck in applying to many roles is preparation, not the Submit click:
+# tailoring, drafting screening answers, and digging the apply URL out of the JD.
+# So the queue does all of that for N roles in one background pass, then walks you
+# through them one screen at a time. It never submits — every application is
+# opened, reviewed and sent by a human, which is also why nothing here needs the
+# credentials or the automation that gets job-board accounts restricted.
+APPLY_DIR = CO/"output/apply-queue"
+JOBS = {}
+_job_lock = threading.Lock()
+
+def _job_new(label, total):
+    jid = f"job{len(JOBS)+1}-{total}"
+    with _job_lock:
+        JOBS[jid] = dict(id=jid, label=label, total=total, done=0, items=[], finished=False, msg="")
+    return jid
+
+def _job_step(jid, company, role, ok, detail=""):
+    with _job_lock:
+        j = JOBS.get(jid)
+        if not j: return
+        j["done"] += 1
+        j["items"].append(dict(company=company, role=role, ok=bool(ok), detail=detail))
+
+def _job_done(jid, msg):
+    with _job_lock:
+        j = JOBS.get(jid)
+        if j: j["finished"] = True; j["msg"] = msg
+
+def do_job_status(jid):
+    with _job_lock:
+        j = JOBS.get(jid)
+    return j or dict(ok=False, msg="No such job.")
+
+# ATS hosts the assisted-apply autofill knows how to fill. Greenhouse serves the
+# same boards from job-boards.greenhouse.io today, which the older host list missed.
+_ATS = [
+    ("greenhouse", r"(job-)?boards?\.greenhouse\.io|greenhouse\.io"),
+    ("lever",      r"jobs\.(eu\.)?lever\.co|lever\.co"),
+    ("ashby",      r"jobs\.ashbyhq\.com|ashbyhq\.com"),
+    ("workday",    r"myworkdayjobs\.com"),
+    ("icims",      r"icims\.com"),
+    ("smartrecruiters", r"smartrecruiters\.com"),
+    ("workable",   r"apply\.workable\.com|workable\.com"),
+    ("bamboohr",   r"bamboohr\.com"),
+    ("jobvite",    r"jobvite\.com"),
+    ("taleo",      r"taleo\.net"),
+]
+def ats_of(url):
+    u=(url or "").lower()
+    for name, pat in _ATS:
+        if re.search(pat, u): return name
+    return ""
+
+def _answers_for(company, role, jd, cv, key):
+    """Draft the screening answers an ATS actually asks for.
+
+    Deliberately returns DRAFTS for a human to confirm. The questions that matter
+    most here — work authorization, sponsorship, notice period, compensation — are
+    legally meaningful statements made in the candidate's name, so the queue shows
+    every one of them for review rather than filling them silently.
+    """
+    if not key: return ""
+    sys_p = ("You draft an applicant's answers to standard ATS screening questions. Ground every "
+             "claim in the CV; never invent an employer, a date, a number, or a credential. Where the "
+             "CV does not settle an answer (work authorization, sponsorship, notice period, salary), "
+             "write the answer as a [BRACKETED] placeholder for the candidate to fill in — never guess. "
+             "Answer in the candidate's own voice, plainly, no filler.")
+    usr = (f"Role: {role} at {company}\n\nCV:\n{cv[:4000]}\n\n"
+           + (f"Job description:\n{jd[:3000]}\n\n" if jd else "")
+           + "Draft short answers (1-3 sentences each) under these markdown headings:\n"
+             "### Why this company\n### Why you are a fit\n### Notable relevant achievement\n"
+             "### Work authorization\n### Salary expectation\n### Earliest start date\n")
+    try:
+        return _llm([{"role":"system","content":sys_p},{"role":"user","content":usr}], key, 900)
+    except Exception as e:
+        return f"_(answer drafting failed: {str(e)[:120]})_"
+
+def _apply_pack(a, key):
+    """Write one reviewable application pack; return (path, warnings)."""
+    APPLY_DIR.mkdir(parents=True, exist_ok=True)
+    num, company, role = a["num"], a["company"], a["role"]
+    url = jd_url(a)
+    jdf = saved_jd(a); jd = read(CO/"jds"/jdf) if jdf else ""
+    cv  = read(CO/"cv.md")
+    P   = profile()
+    resume = resume_for(company, num)
+    ats = ats_of(url)
+    warn = []
+    if not url:    warn.append("no apply URL on file — open the role and add one")
+    if not resume: warn.append("no tailored résumé PDF in output/ — generate one before submitting")
+    if not jd:     warn.append("no JD saved — answers are role-level, not tailored")
+    if url and not ats: warn.append("unrecognised ATS — autofill will not run, fill by hand")
+
+    fields = "\n".join(f"- **{k}:** {v}" for k, v in (
+        ("Name", P["name"]), ("Email", P["email"]), ("Phone", P["phone"]),
+        ("Location", P["location"]), ("LinkedIn", P["linkedin"]), ("Website", P["website"])) if v)
+    body = (f"# {company} — {role}\n\n"
+            f"- **Tracker:** #{num}\n- **Apply URL:** {url or '_(none on file)_'}\n"
+            f"- **ATS:** {ats or '_(unrecognised)_'}\n"
+            f"- **Résumé:** {('output/'+resume) if resume else '_(none — generate one)_'}\n\n"
+            + ("> **Check before submitting:** " + "; ".join(warn) + "\n\n" if warn else "")
+            + f"## Application fields\n{fields}\n\n"
+            f"## Screening answers (DRAFTS — confirm every [BRACKET] before you submit)\n\n"
+            + (_answers_for(company, role, jd, cv, key) or "_(no API key configured — fill by hand)_")
+            + "\n\n## Before you click Submit\n"
+              "- [ ] Résumé attached is the one tailored to this role\n"
+              "- [ ] Every [BRACKET] replaced with a real answer\n"
+              "- [ ] Work authorization / sponsorship answered truthfully\n"
+              "- [ ] Salary expectation is the number you actually want\n")
+    out = APPLY_DIR/f"{str(num).zfill(3)}-{slug(company) or 'role'}.md"
+    out.write_text(body)
+    return out.name, warn
+
+def _prepare_worker(jid, picks):
+    key = load_key()
+    for pk in picks:
+        company, title = pk.get("company",""), pk.get("title","")
+        try:
+            sel = do_select(pk.get("url",""), company, title, pk.get("posted",""))
+            a = next((x for x in apps() if slug(x["company"])==slug(company) and slug(x["role"])==slug(title)), None)
+            if not a:
+                _job_step(jid, company, title, False, sel.get("msg","could not add to the board")); continue
+            name, warn = _apply_pack(a, key)
+            _job_step(jid, company, title, True, ("; ".join(warn) if warn else "ready"))
+        except Exception as e:
+            _job_step(jid, company, title, False, str(e)[:140])
+    ok = sum(1 for i in JOBS.get(jid,{}).get("items",[]) if i["ok"])
+    _job_done(jid, f"Prepared {ok} of {len(picks)} application(s). Work them in the Apply tab.")
+
+def do_prepare_batch(picks):
+    picks = [p for p in (picks or []) if p.get("company") and p.get("title")]
+    if not picks: return dict(ok=False, msg="Nothing selected.")
+    if len(picks) > 50: return dict(ok=False, msg="Prepare at most 50 at a time.")
+    jid = _job_new(f"Preparing {len(picks)} application(s)", len(picks))
+    threading.Thread(target=_prepare_worker, args=(jid, picks), daemon=True).start()
+    return dict(ok=True, msg=f"Preparing {len(picks)} application(s)…", job=jid)
+
+def apply_queue():
+    """Roles on the board that are prepared and not yet applied to."""
+    dead={"applied","rejected","discarded","skip","hired","offer","interview","responded"}
+    out=[]
+    for a in apps():
+        if a["status"].lower() in dead: continue
+        pack = APPLY_DIR/f"{str(a['num']).zfill(3)}-{slug(a['company']) or 'role'}.md"
+        if not pack.exists(): continue
+        url = jd_url(a)
+        out.append(dict(num=a["num"], company=a["company"], role=a["role"], url=url,
+                        ats=ats_of(url), pack=pack.name, resume=resume_for(a["company"], a["num"]),
+                        body=read(pack)))
+    return out
+
+def do_queue_submitted(num):
+    r = do_apply(num)
+    if r.get("ok"):
+        a = next((x for x in apps() if x["num"]==str(num)), None)
+        r["msg"] = f"✓ {a['company'] if a else 'Role'} marked Applied — next in the queue."
+    return r
+
+def do_queue_skip(num):
+    return dict(ok=True, msg="Skipped — still on your board, still in the queue.")
 
 def _mock_running():
     try:
@@ -1600,6 +1762,7 @@ details summary{color:var(--accent2)}
   <div class="tabs">
     <button id="tab-board" class="on" onclick="view('board')">Board</button>
     <button id="tab-discover" onclick="view('discover')">Discover</button>
+    <button id="tab-apply" onclick="view('apply')">Apply <span id="qcount" class="sm"></span></button>
   </div>
   <div class="htools">
     <button onclick="openSetup()" title="Enter your résumé, profile, and API key">🚀 Setup</button>
@@ -1636,13 +1799,29 @@ details summary{color:var(--accent2)}
     <div class="panel" style="margin-bottom:16px"><h2 id="nmtitle">🆕 New matches</h2>
       <div id="nmwin" class="sm muted" style="margin:-4px 0 4px"></div>
       <div id="nmhidden" class="sm muted" style="margin:0 0 10px"></div>
-      <table><thead><tr><th>Fit</th><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
+      <table><thead><tr><th></th><th>Fit</th><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
       <div id="nmmore" style="margin-top:10px"></div>
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button id="prepbtn" class="sm p" disabled onclick="prepareBatch()">⚙ Prepare selected</button>
+        <span id="prepprog" class="sm muted"></span>
+      </div>
       <div class="sm muted" style="margin-top:8px">Only roles you have never seen appear here — anything ignored, selected or applied to is filtered out by its company+role hash. Staffing agencies and aggregators are pushed to the bottom, never hidden. Fit = a quick title/location heuristic vs your profile; the full score comes when you Select &amp; evaluate.</div>
     </div>
     <div class="panel" style="margin-bottom:16px"><details><summary style="cursor:pointer;font-weight:600;color:var(--muted)">🚫 Ignored / seen (<span id="igncount">0</span>) — hidden from Discover</summary>
       <table style="margin-top:10px"><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="ignored"></tbody></table>
     </details></div>
+  </div>
+</div>
+
+<!-- APPLY QUEUE VIEW -->
+<div id="v-apply" style="display:none">
+  <div class="disc">
+    <div class="panel" style="margin-bottom:16px">
+      <h2>⚡ Apply queue</h2>
+      <div id="qnav" class="sm muted" style="margin:-4px 0 10px"></div>
+      <div id="qcard"></div>
+      <div class="sm muted" style="margin-top:10px">Everything here is prepared for you to review — JobHelm never submits. You open the posting, autofill what is safe to autofill, check the drafted answers, attach the résumé, and click Submit yourself.</div>
+    </div>
   </div>
 </div>
 
@@ -1661,20 +1840,121 @@ function rc(p){return p>=65?'var(--accent)':p>=35?'var(--amber)':'var(--red)'}
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function byNum(n){return DATA.pipeline.find(function(p){return String(p.num)===String(n)})}
 function fieldPack(){var P=DATA.profile||{};return ['Name: '+(P.name||''),'Email: '+(P.email||''),'Phone: '+(P.phone||''),'Location: '+(P.location||''),'LinkedIn: '+(P.linkedin||''),'Website: '+(P.website||'')].join('\\n');}
-function bmHref(){
-  var P=DATA.profile||{}; var nm=(P.name||'').trim().split(' ');
-  var d={fn:nm[0]||'',ln:nm.slice(1).join(' '),email:P.email||'',phone:P.phone||'',li:P.linkedin||'',loc:P.location||''};
-  var body="(function(){var P="+JSON.stringify(d)+";function s(q,v){var e=document.querySelector(q);if(e&&v){e.focus();e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return 1}return 0}s('#first_name',P.fn);s('#last_name',P.ln);s('#email',P.email);s('#phone',P.phone);s('#job_application_location',P.loc);var ls=document.querySelectorAll('label');for(var i=0;i<ls.length;i++){if(/linkedin/i.test(ls[i].textContent)){var id=ls[i].getAttribute('for');if(id)s('#'+id,P.li)}}alert('JobHelm autofill done: name, email, phone, location, LinkedIn. Review, attach resume, submit.');})();";
-  return 'javascript:'+encodeURIComponent(body);
-}
 function stageOf(status){var s=(status||'').toLowerCase();for(var i=0;i<STAGES.length;i++){if(s.indexOf(STAGES[i][0])>=0)return STAGES[i][0]}
   if(s.indexOf('hired')>=0)return 'offer'; return 'applied'}
 
 function view(v){
   document.getElementById('v-board').style.display=v==='board'?'':'none';
   document.getElementById('v-discover').style.display=v==='discover'?'':'none';
+  document.getElementById('v-apply').style.display=v==='apply'?'':'none';
   document.getElementById('tab-board').classList.toggle('on',v==='board');
   document.getElementById('tab-discover').classList.toggle('on',v==='discover');
+  document.getElementById('tab-apply').classList.toggle('on',v==='apply');
+  if(v==='apply') renderApply();
+}
+
+
+/* ---- Phase 3: assisted autofill -------------------------------------------
+   A bookmarklet, not a driver: it runs in YOUR tab, on a page you opened, fills
+   the identity fields, and then tells you what it could not fill. It never
+   clicks Submit and never touches credentials, which is why it cannot get an
+   account restricted the way an auto-apply bot can. Per-ATS selectors first,
+   then a generic label/name/autocomplete pass for the long tail of ATSes. */
+var ATS_SEL={
+  greenhouse:{fn:'#first_name',ln:'#last_name',email:'#email',phone:'#phone',loc:'#job_application_location'},
+  lever:{full:'input[name="name"]',email:'input[name="email"]',phone:'input[name="phone"]',
+         org:'input[name="org"]',li:'input[name="urls[LinkedIn]"]'},
+  ashby:{full:'#_systemfield_name',email:'#_systemfield_email',phone:'#_systemfield_phone'},
+  workday:{fn:'input[data-automation-id="legalNameSection_firstName"]',
+           ln:'input[data-automation-id="legalNameSection_lastName"]',
+           email:'input[data-automation-id="email"]',phone:'input[data-automation-id="phone-number"]'},
+  workable:{fn:'input[name="firstname"]',ln:'input[name="lastname"]',email:'input[name="email"]',phone:'input[name="phone"]'},
+  smartrecruiters:{fn:'#firstName',ln:'#lastName',email:'#email',phone:'#phone'},
+  icims:{}, jobvite:{}, bamboohr:{}, taleo:{}
+};
+function bmHref(ats){
+  var P=DATA.profile||{}; var nm=(P.name||'').trim().split(' ');
+  var d={fn:nm[0]||'',ln:nm.slice(1).join(' '),full:(P.name||''),email:P.email||'',
+         phone:P.phone||'',li:P.linkedin||'',loc:P.location||'',web:P.website||''};
+  var sel=ATS_SEL[ats||'']||{};
+  var body="(function(){var P="+JSON.stringify(d)+",S="+JSON.stringify(sel)+",n=0;"
+   +"function set(e,v){if(!e||!v||e.disabled||e.readOnly)return 0;var t=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');"
+   +"try{t&&t.set?t.set.call(e,v):e.value=v}catch(_){e.value=v}"                       /* React-controlled inputs ignore a plain .value */
+   +"e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));n++;return 1}"
+   +"function q(s,v){if(!s)return 0;return set(document.querySelector(s),v)}"
+   +"q(S.fn,P.fn);q(S.ln,P.ln);q(S.full,P.full);q(S.email,P.email);q(S.phone,P.phone);q(S.loc,P.loc);q(S.li,P.li);"
+   +"var pats=[[/first.?name|given.?name/i,P.fn],[/last.?name|surname|family.?name/i,P.ln],"
+   +"[/^full.?name$|^name$|your.?name/i,P.full],[/e.?mail/i,P.email],[/phone|mobile|tel/i,P.phone],"
+   +"[/linked.?in/i,P.li],[/website|portfolio|personal.?site/i,P.web],[/city|location|where.*based/i,P.loc]];"
+   +"var ins=document.querySelectorAll('input,textarea');"
+   +"for(var i=0;i<ins.length;i++){var e=ins[i];if(e.value||e.type=='file'||e.type=='hidden'||e.type=='checkbox'||e.type=='radio')continue;"
+   +"var lab=(e.labels&&e.labels[0])?e.labels[0].textContent:'';"
+   +"var hay=[lab,e.name||'',e.getAttribute('aria-label')||'',e.placeholder||'',e.getAttribute('autocomplete')||''].join(' ');"
+   +"for(var k=0;k<pats.length;k++){if(pats[k][1]&&pats[k][0].test(hay)){set(e,pats[k][1]);break}}}"
+   +"var miss=[];var req=document.querySelectorAll('[required],[aria-required]');"
+   +"for(var r=0;r<req.length;r++){var x=req[r];if(x.type=='hidden')continue;if(!x.value&&!x.checked){"
+   +"var lb=(x.labels&&x.labels[0])?x.labels[0].textContent.trim():'';"
+   +"miss.push((lb||x.name||x.getAttribute('aria-label')||'(unlabelled field)').slice(0,70))}}"
+   +"var NL=String.fromCharCode(10),BU=String.fromCharCode(8226)+' ';"
+   +"alert('JobHelm filled '+n+' field(s).'+(miss.length?NL+NL+'Still required \u2014 answer these yourself:'+NL+BU+miss.slice(0,12).join(NL+BU):NL+NL+'No required field left empty.')+NL+NL+'Attach your resume, check every answer, then Submit. JobHelm never submits for you.');})();";
+  return 'javascript:'+encodeURIComponent(body);
+}
+
+/* ---- Phase 2: work the queue, one role at a time ---- */
+var QI=0;
+function renderApply(){
+  var Q=DATA.apply_queue||[]; var nav=document.getElementById('qnav'), card=document.getElementById('qcard');
+  var c=document.getElementById('qcount'); if(c) c.textContent=Q.length?'('+Q.length+')':'';
+  if(!nav||!card) return;
+  if(!Q.length){ nav.textContent='';
+    card.innerHTML='<div class="muted">Queue is empty. Tick roles in <a href="#" onclick="view(\\'discover\\');return false">Discover</a> and press <b>Prepare N applications</b> — each one gets a tailored pack you can work through here.</div>'; return; }
+  if(QI>=Q.length) QI=Q.length-1; if(QI<0) QI=0;
+  var p=Q[QI];
+  nav.innerHTML='<b>'+(QI+1)+' of '+Q.length+'</b> · '
+    +'<button class="sm" onclick="QI--;renderApply()"'+(QI?'':' disabled')+'>← Prev</button> '
+    +'<button class="sm" onclick="QI++;renderApply()"'+(QI<Q.length-1?'':' disabled')+'>Next →</button>';
+  var atsLabel=p.ats?('<span class="sm" style="background:var(--accent);color:#0b0d10;border-radius:4px;padding:1px 6px;font-weight:700">'+esc(p.ats)+'</span>')
+                    :'<span class="sm muted">ATS not recognised — fill by hand</span>';
+  card.innerHTML=
+    '<h3 style="margin:0 0 2px">'+esc(p.company)+' — '+esc(p.role)+'</h3>'
+   +'<div class="sm muted" style="margin-bottom:10px">#'+esc(p.num)+' · '+atsLabel+'</div>'
+   +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+   +(p.url?'<a class="sm b" style="padding:6px 10px" href="'+esc(p.url)+'" target="_blank" rel="noopener">1. Open posting ↗</a>':'<span class="sm muted">no apply URL on file</span>')
+   +'<a class="sm b" style="padding:6px 10px" href="'+bmHref(p.ats)+'" title="Drag this to your bookmarks bar, then click it on the application page">2. ⚡ Autofill (drag to bookmarks)</a>'
+   +(p.resume?'<button class="sm" onclick="act(\\'open_resume\\',{num:\\''+p.num+'\\'})">3. 📄 Open résumé</button>':'<span class="sm muted">no tailored résumé — generate one first</span>')
+   +'</div>'
+   +'<pre class="fieldpack" style="max-height:420px;overflow:auto;white-space:pre-wrap">'+esc(p.body||'')+'</pre>'
+   +'<div style="margin-top:12px;display:flex;gap:8px">'
+   +'<button class="sm p" onclick="queueDone(\\''+p.num+'\\')">✓ I submitted this</button>'
+   +'<button class="sm" onclick="QI++;renderApply()">Skip for now</button></div>';
+}
+async function queueDone(num){
+  var r=await postJSON('/api/queue_submitted',{num:num}); toast(r.msg||'Marked Applied');
+  await load(); renderApply();
+}
+
+/* ---- Phase 1: prepare a batch from Discover ---- */
+var PICKS={};
+function togglePick(k,url,co,title,posted){
+  if(PICKS[k]) delete PICKS[k];
+  else PICKS[k]={url:decodeURIComponent(url),company:decodeURIComponent(co),title:decodeURIComponent(title),posted:posted};
+  var n=Object.keys(PICKS).length, b=document.getElementById('prepbtn');
+  if(b){ b.disabled=!n; b.textContent=n?('⚙ Prepare '+n+' application'+(n>1?'s':'')):'⚙ Prepare selected'; }
+}
+async function prepareBatch(){
+  var picks=Object.keys(PICKS).map(function(k){return PICKS[k]});
+  if(!picks.length){toast('Tick some roles first.');return}
+  if(!confirm('Prepare '+picks.length+' application(s)? Each is added to your board and gets a reviewable pack. Nothing is submitted.')) return;
+  var r=await postJSON('/api/prepare_batch',{picks:picks});
+  if(!r.ok){toast(r.msg||'Failed');return}
+  var el=document.getElementById('prepprog');
+  var tick=setInterval(async function(){
+    var st=await postJSON('/api/job_status',{job:r.job});
+    if(el) el.innerHTML='<b>'+(st.done||0)+' / '+(st.total||picks.length)+'</b> prepared'
+      +(st.items&&st.items.length?' · '+esc(st.items[st.items.length-1].company):'');
+    if(st.finished){clearInterval(tick); if(el)el.textContent=st.msg||''; PICKS={};
+      toast(st.msg||'Done'); await load(); view('apply');}
+  },900);
 }
 
 function renderDiscover(){
@@ -1696,7 +1976,8 @@ function renderDiscover(){
     var sccell=m.company?'<td><b style="color:'+scc+'">'+sc.toFixed(1)+'</b><span class="sm muted">/5</span></td>':'<td></td>';
     var agy=m.agency?' <span class="sm muted" title="Staffing agency or aggregator \u2014 the real employer is not named">via agency</span>':'';
     var nw=m.is_new?' <span class="sm" style="background:var(--accent);color:#0b0d10;border-radius:4px;padding:1px 6px;font-weight:700" title="First appeared in Discover after you last marked the list reviewed">NEW</span>':'';
-    return '<tr'+(m.is_new?' style="background:color-mix(in srgb,var(--accent) 9%, transparent)"':(m.agency?' style="opacity:.68"':''))+'>'+sccell+'<td><b>'+esc(m.company)+'</b>'+nw+agy+'</td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
+    var pk=(m.company&&m.title)?'<td><input type="checkbox" title="Select for the Apply queue" onchange="togglePick(\\''+esc(m.key||'')+'\\','+args.slice(6)+'"></td>':'<td></td>';
+    return '<tr'+(m.is_new?' style="background:color-mix(in srgb,var(--accent) 9%, transparent)"':(m.agency?' style="opacity:.68"':''))+'>'+pk+sccell+'<td><b>'+esc(m.company)+'</b>'+nw+agy+'</td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
   (function(){var el=document.getElementById('nmmore');if(!el)return;
     if(_all.length>_lim){el.innerHTML='<button class="sm" onclick="window._nmAll=true;renderDiscover()">Show all '+MT.total+' \u2193</button> <span class="sm muted">showing '+_lim+' of '+MT.total+(MT.total>MT.sent?' ('+MT.sent+' loaded \u2014 raise JOBHELM_DISCOVER_MAX for more)':'')+'</span>';}
     else if(window._nmAll&&_all.length>(MT.shown||40)){el.innerHTML='<button class="sm" onclick="window._nmAll=false;renderDiscover()">Show fewer \u2191</button> <span class="sm muted">showing all '+_all.length+'</span>';}
@@ -2099,6 +2380,10 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/ignore": self._send(200,json.dumps(do_ignore(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
         elif p=="/api/unignore": self._send(200,json.dumps(do_unignore(args.get("url",""))))
         elif p=="/api/ack_discover": self._send(200,json.dumps(do_ack_discover()))
+        elif p=="/api/prepare_batch": self._send(200,json.dumps(do_prepare_batch(args.get("picks"))))
+        elif p=="/api/job_status": self._send(200,json.dumps(do_job_status(args.get("job",""))))
+        elif p=="/api/queue_submitted": self._send(200,json.dumps(do_queue_submitted(args.get("num"))))
+        elif p=="/api/queue_skip": self._send(200,json.dumps(do_queue_skip(args.get("num"))))
         elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
         elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
