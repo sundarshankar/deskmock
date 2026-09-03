@@ -32,6 +32,9 @@ HOME = pathlib.Path.home()
 CO   = pathlib.Path(os.environ.get("JOBHELM_CAREEROPS", str(HERE / "sample-data")))
 MOCK = pathlib.Path(os.environ.get("JOBHELM_MOCK", str(HERE / "sample-data" / "mock")))
 PORT = int(os.environ.get("JOBHELM_PORT", "8899"))
+DISCOVER_DAYS  = int(os.environ.get("JOBHELM_DISCOVER_DAYS", "14"))   # posting age window, from today
+DISCOVER_SHOWN = int(os.environ.get("JOBHELM_DISCOVER_SHOWN", "40"))  # rows rendered before "show all"
+DISCOVER_MAX   = int(os.environ.get("JOBHELM_DISCOVER_MAX", "200"))   # rows sent to the browser
 HOST = os.environ.get("JOBHELM_HOST", "127.0.0.1")   # Docker sets 0.0.0.0
 
 def read(p):
@@ -75,27 +78,287 @@ def jd_url(a):
     company=[u for u in urls if _is_company(u)]
     return company[0] if company else (urls[0] if urls else "")
 
+# ---------- suppression keys ("already seen") ----------
+# Discover kept re-surfacing roles that were already on the board or applied to,
+# because the only filter was an exact URL match against jobhelm-ignored.tsv. The
+# same posting reaches us under several URLs (LinkedIn view id, the ATS link, a
+# tracking-param variant), so a URL-only key misses almost every repeat. Every
+# suppression check below is therefore keyed on a normalized company+role *hash*
+# as well as the URL, and the tracker itself (applications.md) is a suppression
+# source — selecting or applying to a role hides it from Discover for good.
+
+_TITLE_SUBS = [
+    (r"\bsr\.?\b", "senior"), (r"\bjr\.?\b", "junior"),
+    (r"\bsvp\b", "senior vice president"), (r"\bevp\b", "executive vice president"),
+    (r"\bavp\b", "associate vice president"), (r"\bvp\b", "vice president"),
+    (r"\bdir\.?\b", "director"), (r"\bmgr\.?\b", "manager"),
+    (r"\bengineer\b", "engineering"), (r"\beng\.?\b", "engineering"),
+    (r"\bops\b", "operations"), (r"\binfra\b", "infrastructure"),
+    (r"\bsre\b", "site reliability engineering"),
+]
+# Legal/brand suffixes and filler that differ between a board listing and the
+# tracker row for the identical employer ("WEX" vs "wexinc", "Coca-Cola" vs "coke").
+_CO_STRIP = re.compile(r"\b(inc|llc|l\.?l\.?c|lp|ltd|limited|corp|corporation|company|co|the|group|holdings|plc|gmbh|sa|nv|ag|technologies|technology)\b", re.I)
+
+def _norm_title(t):
+    t = (t or "").lower()
+    t = re.sub(r"\([^()]*\)", " ", t)          # drop "(Remote)", "(US)", "(Hybrid)"
+    t = re.sub(r"[\u2010-\u2015]", "-", t)     # unicode dashes -> ascii
+    for pat, rep in _TITLE_SUBS: t = re.sub(pat, rep, t)
+    return re.sub(r"[^a-z0-9]", "", t)
+
+def _norm_company(c):
+    return re.sub(r"[^a-z0-9]", "", _CO_STRIP.sub(" ", (c or "").lower()))
+
+def _url_key(u):
+    u = (u or "").split("?")[0].split("#")[0].strip().rstrip("/").lower()
+    return re.sub(r"^https?://(www\.)?", "", u)
+
+def role_hash(company, title):
+    """Stable company+role key. Two listings of the same job collapse to one hash
+    even when the board, the URL and the punctuation differ."""
+    c, t = _norm_company(company), _norm_title(title)
+    return f"{c}::{t}" if t else ""
+
+def _co_match(a, b):
+    """Do two company labels denote the same employer?
+
+    The same employer reaches Discover under several labels: the ATS tenant slug
+    ("wexinc", "lightspeedhq"), the board's display name ("WEX", "Lightspeed
+    Commerce"), and the legal name. The old length>=4-on-both containment rule
+    missed exactly the short-slug case — "wex" is 3 characters, so WEX and wexinc
+    read as two different companies and the identical job listed twice.
+    """
+    if not a or not b: return False
+    if a == b: return True
+    if len(a) >= 4 and len(b) >= 4 and (a in b or b in a): return True
+    if min(len(a), len(b)) >= 3 and (a.startswith(b) or b.startswith(a)): return True
+    # "lightspeedhq" vs "lightspeedcommerce": neither contains the other, but a
+    # long shared prefix plus (at the only call site) an identical role title is
+    # strong evidence of one posting, not two.
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]: i += 1
+    return i >= 6
+
 def _ignored_rows():
     out=[]
     for ln in read(CO/"data/jobhelm-ignored.tsv").splitlines():
         c=ln.split("\t")
         if c and c[0].startswith("http"):
             out.append(dict(url=c[0], posted=(c[1] if len(c)>1 else ""),
-                            company=(c[2] if len(c)>2 else ""), title=(c[3] if len(c)>3 else "")))
+                            company=(c[2] if len(c)>2 else ""), title=(c[3] if len(c)>3 else ""),
+                            key=(c[4] if len(c)>4 else role_hash(c[2] if len(c)>2 else "", c[3] if len(c)>3 else "")),
+                            why="ignored"))
     return out
-def _ignored_set(): return {r["url"].split("?")[0] for r in _ignored_rows()}
+
+def suppressed_index():
+    """URL keys + company/role hashes for everything Discover must not show again:
+    manually ignored postings AND every row already in the tracker (any status —
+    Evaluated, Applied, Rejected, Discarded, SKIP; all of them mean 'seen')."""
+    urls=set(); by_title={}; reasons={}
+    def add(company, title, url, why):
+        uk=_url_key(url)
+        if uk: urls.add(uk)
+        tk=_norm_title(title)
+        if tk:
+            by_title.setdefault(tk, set()).add(_norm_company(company))
+            reasons.setdefault(role_hash(company, title), why)
+    # Tracker first so a role that is both applied-to and ignored reports the
+    # more informative reason (reasons uses setdefault — first writer wins).
+    for a in apps():         add(a["company"], a["role"], jd_url(a), (a["status"] or "tracked").lower())
+    for r in _ignored_rows(): add(r["company"], r["title"], r["url"], "ignored")
+    return dict(urls=urls, by_title=by_title, reasons=reasons)
+
+def suppression_reason(company, title, url, idx):
+    """Why Discover should hide this row, or '' when it is genuinely new."""
+    if _url_key(url) in idx["urls"]: return "seen"
+    tk=_norm_title(title)
+    if not tk: return ""
+    ck=_norm_company(company)
+    for other in idx["by_title"].get(tk, ()):
+        if _co_match(ck, other):
+            return idx["reasons"].get(f"{other}::{tk}") or idx["reasons"].get(f"{ck}::{tk}") or "seen"
+    return ""
+
+def _ignored_set(): return {_url_key(r["url"]) for r in _ignored_rows()}
+
 def do_ignore(url, company="", title="", posted=""):
     if not (url or "").startswith("http"): return dict(ok=False, msg="No URL to ignore.")
-    if url.split("?")[0] in _ignored_set(): return dict(ok=True, msg="Already ignored.")
-    with (CO/"data/jobhelm-ignored.tsv").open("a") as f: f.write(f"{url}\t{posted}\t{company}\t{title}\n")
-    return dict(ok=True, msg=f"Ignored{(' — '+company) if company else ''}.")
+    if suppression_reason(company, title, url, suppressed_index()):
+        return dict(ok=True, msg="Already hidden from Discover.")
+    key=role_hash(company, title)
+    with (CO/"data/jobhelm-ignored.tsv").open("a") as f:
+        f.write(f"{url}\t{posted}\t{company}\t{title}\t{key}\n")
+    return dict(ok=True, msg=f"Ignored{(' — '+company) if company else ''} (and any repost of it).")
+
 def do_unignore(url):
     p=CO/"data/jobhelm-ignored.tsv"
     if not p.exists(): return dict(ok=True, msg="ok")
-    key=(url or "").split("?")[0]
-    lines=[ln for ln in read(p).splitlines() if ln.strip() and ln.split("\t")[0].split("?")[0]!=key]
-    p.write_text("\n".join(lines)+("\n" if lines else ""))
+    key=_url_key(url)
+    # Restore every row sharing this posting's role hash, not just the one URL —
+    # otherwise a sibling row keeps the role suppressed and Restore looks broken.
+    hashes={r["key"] for r in _ignored_rows() if _url_key(r["url"])==key and r["key"]}
+    keep=[]
+    for ln in read(p).splitlines():
+        if not ln.strip(): continue
+        c=ln.split("\t")
+        if _url_key(c[0])==key: continue
+        h=c[4] if len(c)>4 else role_hash(c[2] if len(c)>2 else "", c[3] if len(c)>3 else "")
+        if h and h in hashes: continue
+        keep.append(ln)
+    p.write_text("\n".join(keep)+("\n" if keep else ""))
     return dict(ok=True, msg="Restored to Discover.")
+
+# ---------- P1: staffing agencies & job aggregators ----------
+# These listings hide the real employer, so you cannot judge fit, cannot find a
+# warm path, and the company+role hash cannot dedupe them against the same job's
+# direct ATS posting. They are DEMOTED, never hidden — a genuine role sometimes
+# surfaces only through a recruiter, and a false positive should cost ranking,
+# not visibility. Edit data/jobhelm-agencies.txt to tune (one name per line).
+_AGENCY_SEED = """
+ladders jobgether lensa talentify jooble adzuna whatjobs careerbuilder
+simplyhired snagajob jobot cybercoders insightglobal teksystems roberthalf
+motionrecruitment randstad adecco aerotek kforce apexsystems getitrecruit
+hiremefast jobright dice ziprecruiter talentify bluesignal axialsearch
+lastellargroup visionairepartners gbit globalbridgeinfotech onhires
+mobilityglobal diverselynx tekwissen collabera mindlance artech judgegroup
+beaconhill addisongroup michaelpage kornferry heidrick russellreynolds
+spencerstuart egonzehnder truesearch rivierapartners storm4 harnham
+"""
+_AGENCY_PAT = re.compile(r"recruit|staffing|headhunt|executive search|search partners|"
+                         r"\btalent\b[\w\s]{0,20}\b(solutions?|management|group|acquisition|partners|search|services)\b", re.I)
+
+_AGENCY_NORM_PAT = re.compile(r"recruit|staffing|headhunt|executivesearch|searchpartners|"
+                              r"talent(management|solution|acquisition|group|partner|search|service)")
+
+def _agency_names():
+    names = set(_AGENCY_SEED.split())
+    for ln in read(CO/"data/jobhelm-agencies.txt").splitlines():
+        ln = ln.split("#")[0].strip()
+        if ln: names.add(_norm_company(ln))
+    return {n for n in names if n}
+
+_AGENCIES = None
+def is_agency(company):
+    global _AGENCIES
+    if _AGENCIES is None: _AGENCIES = _agency_names()
+    c = _norm_company(company)
+    if not c: return False
+    if c in _AGENCIES: return True
+    if any(len(a) >= 5 and a in c for a in _AGENCIES): return True
+    # Test the raw label AND the de-spaced slug: boards emit both
+    # "Talent Management Solutions" and "talentmanagementsolution".
+    return bool(_AGENCY_PAT.search(company or "")) or bool(_AGENCY_NORM_PAT.search(c))
+
+# ---------- P4: "new to YOU", not just "recently posted" ----------
+# posted-date alone cannot answer "have I looked at this yet?" — a role posted
+# five days ago that you scrolled past yesterday looked identical to one that
+# landed an hour ago. Two facts fix that: when a role first APPEARED in your
+# Discover (per role hash, append-only) and when you last said you had reviewed
+# the list. Anything first seen after that acknowledgement is new to you.
+SEEN_PATH = CO/"data/jobhelm-seen.tsv"
+ACK_PATH  = CO/"data/jobhelm-discover-ack.txt"
+SEEN_KEEP_DAYS = 180
+_seen_lock = threading.Lock()
+
+def _now_stamp(): return datetime.datetime.now().replace(microsecond=0).isoformat(" ")
+
+def _load_first_seen():
+    out={}
+    for ln in read(SEEN_PATH).splitlines():
+        c=ln.split("\t")
+        if len(c)>=2 and c[0].strip(): out[c[0]]=c[1]
+    return out
+
+def _last_ack(): return read(ACK_PATH).strip()
+
+def stamp_first_seen(rows):
+    """Record the first time each role hash surfaced in Discover; return the map.
+
+    On a cold start the store and the acknowledgement are written together, so the
+    very first load does not flag all 100+ existing rows as brand new — the band
+    starts empty and fills as genuinely fresh postings arrive."""
+    with _seen_lock:
+        cold = not SEEN_PATH.exists()
+        fs = _load_first_seen()
+        now = _now_stamp()
+        fresh = [r for r in rows if r.get("key") and r["key"] not in fs]
+        if fresh:
+            with SEEN_PATH.open("a") as f:
+                for r in fresh:
+                    f.write(f"{r['key']}\t{now}\t{r.get('url','')}\t{r.get('company','')}\t{r.get('title','')}\n")
+                    fs[r["key"]] = now
+        if cold or not ACK_PATH.exists(): ACK_PATH.write_text(now+"\n")
+    return fs
+
+def prune_first_seen(days=SEEN_KEEP_DAYS):
+    """Drop entries older than `days` so the store cannot grow without bound."""
+    if not SEEN_PATH.exists(): return 0
+    cut = (datetime.date.today()-datetime.timedelta(days=days)).isoformat()
+    with _seen_lock:
+        lines = [ln for ln in read(SEEN_PATH).splitlines() if ln.strip()]
+        keep  = [ln for ln in lines if (ln.split("\t")+[""])[1][:10] >= cut]
+        if len(keep) != len(lines): SEEN_PATH.write_text("\n".join(keep)+("\n" if keep else ""))
+    return len(lines)-len(keep)
+
+def do_ack_discover():
+    with _seen_lock: ACK_PATH.write_text(_now_stamp()+"\n")
+    return dict(ok=True, msg="Marked reviewed — the NEW band clears until fresh postings arrive.")
+
+# ---------- P4: "new to YOU", not just "recently posted" ----------
+# posted-date alone cannot answer "have I looked at this yet?" — a role posted
+# five days ago that you scrolled past yesterday looked identical to one that
+# landed an hour ago. Two facts fix that: when a role first APPEARED in your
+# Discover (per role hash, append-only) and when you last said you had reviewed
+# the list. Anything first seen after that acknowledgement is new to you.
+SEEN_PATH = CO/"data/jobhelm-seen.tsv"
+ACK_PATH  = CO/"data/jobhelm-discover-ack.txt"
+SEEN_KEEP_DAYS = 180
+_seen_lock = threading.Lock()
+
+def _now_stamp(): return datetime.datetime.now().replace(microsecond=0).isoformat(" ")
+
+def _load_first_seen():
+    out={}
+    for ln in read(SEEN_PATH).splitlines():
+        c=ln.split("\t")
+        if len(c)>=2 and c[0].strip(): out[c[0]]=c[1]
+    return out
+
+def _last_ack(): return read(ACK_PATH).strip()
+
+def stamp_first_seen(rows):
+    """Record the first time each role hash surfaced in Discover; return the map.
+
+    On a cold start the store and the acknowledgement are written together, so the
+    very first load does not flag all 100+ existing rows as brand new — the band
+    starts empty and fills as genuinely fresh postings arrive."""
+    with _seen_lock:
+        cold = not SEEN_PATH.exists()
+        fs = _load_first_seen()
+        now = _now_stamp()
+        fresh = [r for r in rows if r.get("key") and r["key"] not in fs]
+        if fresh:
+            with SEEN_PATH.open("a") as f:
+                for r in fresh:
+                    f.write(f"{r['key']}\t{now}\t{r.get('url','')}\t{r.get('company','')}\t{r.get('title','')}\n")
+                    fs[r["key"]] = now
+        if cold or not ACK_PATH.exists(): ACK_PATH.write_text(now+"\n")
+    return fs
+
+def prune_first_seen(days=SEEN_KEEP_DAYS):
+    """Drop entries older than `days` so the store cannot grow without bound."""
+    if not SEEN_PATH.exists(): return 0
+    cut = (datetime.date.today()-datetime.timedelta(days=days)).isoformat()
+    with _seen_lock:
+        lines = [ln for ln in read(SEEN_PATH).splitlines() if ln.strip()]
+        keep  = [ln for ln in lines if (ln.split("\t")+[""])[1][:10] >= cut]
+        if len(keep) != len(lines): SEEN_PATH.write_text("\n".join(keep)+("\n" if keep else ""))
+    return len(lines)-len(keep)
+
+def do_ack_discover():
+    with _seen_lock: ACK_PATH.write_text(_now_stamp()+"\n")
+    return dict(ok=True, msg="Marked reviewed — the NEW band clears until fresh postings arrive.")
 
 def match_score(title, loc):
     # zero-LLM heuristic fit (1.0-5.0) from title+location vs the profile. A triage signal, not a full eval.
@@ -127,18 +390,68 @@ def pipeline_recent():
     def d(s):
         try: return datetime.date.fromisoformat(s)
         except Exception: return None
+    # P2: the window is anchored to TODAY, not to the newest row in pipeline.md.
+    # Anchoring to max(posted) meant that after a month without scanning the panel
+    # still claimed "last 7 days" while showing a month-old slice.
+    today = datetime.date.today()
     ds = [d(r["posted"]) for r in rows if d(r["posted"])]
-    mx = max(ds) if ds else None
-    rows = [r for r in rows if d(r["posted"]) and mx and (mx-d(r["posted"])).days <= 7]
-    ign = _ignored_set()
-    rows = [r for r in rows if r["url"].split("?")[0] not in ign]
-    rows.sort(key=lambda r: (r["score"], r["posted"]), reverse=True)   # best fit first
-    seen=set(); uniq=[]                                                # collapse same role from
-    for r in rows:                                                     # different boards (LinkedIn + ATS)
-        k=(slug(r["company"]), slug(r["title"]))
-        if k in seen: continue
-        seen.add(k); uniq.append(r)
-    return uniq[:40]
+    newest = max(ds) if ds else None
+    rows = [r for r in rows if d(r["posted"]) and (today-d(r["posted"])).days <= DISCOVER_DAYS]
+    idx = suppressed_index()
+    hidden = {}
+    fresh = []
+    for r in rows:                       # drop anything already ignored, selected or applied to
+        why = suppression_reason(r["company"], r["title"], r["url"], idx)
+        if why:
+            hidden[why] = hidden.get(why, 0) + 1
+            continue
+        r["agency"] = is_agency(r["company"])
+        fresh.append(r)
+    # Real employers first, then best fit, then newest (P1: agencies demoted, not hidden).
+    fresh.sort(key=lambda r: (not r["agency"], r["score"], r["posted"]), reverse=True)
+    # Collapse the same role reaching us from different boards (LinkedIn + ATS).
+    # Company match is fuzzy for the same reason suppression is: the identical
+    # employer arrives as "WEX" from one source and "wexinc" from another.
+    by_title={}; uniq=[]
+    # `fresh` is already ordered real-employers-first, so a mirror always meets the
+    # original listing rather than the other way round.
+    for r in fresh:
+        tk=_norm_title(r["title"]) or slug(r["title"])
+        ck=_norm_company(r["company"])
+        if any(_co_match(ck, prev) for prev in by_title.get(tk, ())):
+            hidden["duplicate listing"]=hidden.get("duplicate listing",0)+1
+            continue
+        # Ladders/jobgether/a recruiter listing a role a named employer already
+        # posted is that same job with the employer stripped out — not a second
+        # opening. Only ever drops the mirror, and only on an exact title match.
+        if r["agency"] and tk in by_title:
+            hidden["mirrored by aggregator"]=hidden.get("mirrored by aggregator",0)+1
+            continue
+        by_title.setdefault(tk,set()).add(ck)
+        r["key"]=role_hash(r["company"], r["title"]) or (slug(r["company"])+"::"+slug(r["title"]))
+        uniq.append(r)
+    # P4: stamp first-seen (needs r["key"], set by the dedupe loop above), then
+    # float anything new-to-you to the very top — agencies included, since a brand
+    # new posting matters more than the channel it arrived through.
+    first_seen = stamp_first_seen(uniq)
+    ack = _last_ack()
+    for r in uniq:
+        r["first_seen"] = first_seen.get(r["key"], "")
+        r["is_new"] = bool(ack and r["first_seen"] > ack)
+    uniq.sort(key=lambda r: (r["is_new"], not r["agency"], r["score"], r["posted"]), reverse=True)
+    new_count = sum(1 for r in uniq if r["is_new"])
+
+    # P3: report the true survivor count so a truncated list cannot read as
+    # "that is everything". DISCOVER_MAX rows travel to the browser; the UI
+    # shows DISCOVER_SHOWN of them behind a "show all" toggle.
+    meta = dict(days=DISCOVER_DAYS, shown=min(len(uniq), DISCOVER_SHOWN),
+                total=len(uniq), sent=min(len(uniq), DISCOVER_MAX),
+                start=(today-datetime.timedelta(days=DISCOVER_DAYS)).isoformat(),
+                end=today.isoformat(), newest=(newest.isoformat() if newest else ""),
+                stale_days=((today-newest).days if newest else None),
+                agencies=sum(1 for r in uniq if r.get("agency")),
+                new_count=new_count, since=ack)
+    return uniq[:DISCOVER_MAX], hidden, meta
 
 prep_files = [pathlib.Path(f).name for f in glob.glob(str(CO / "interview-prep/*.md"))]
 def pack(co):  k=slug(co); return next((f for f in prep_files if k and k in slug(f) and "gap" not in f.lower() and "question" not in f.lower()), "")
@@ -244,7 +557,7 @@ def resume_for(company, num):
 def build_state():
     A=[a for a in apps() if a["status"].upper()!="SKIP"]
     active=[a for a in A if a["status"].upper() not in ("REJECTED","DISCARDED")]
-    pipe=pipeline_recent(); nm=n_mock(); sg=standing_gaps(); cb=contacts_by_co()
+    pipe,pipe_hidden,pipe_meta=pipeline_recent(); nm=n_mock(); sg=standing_gaps(); cb=contacts_by_co()
     def cnt(*s): return sum(1 for a in A if a["status"].lower() in [x.lower() for x in s])
     STAGES=["evaluated","applied","responded","interview","offer"]
     def nextact(a):
@@ -275,15 +588,16 @@ def build_state():
     if nm < 3:
         na.append(dict(kind="mock",label=f"Rehearse — only {nm} mock session(s) logged (aim 3+)",co=""))
     if pipe:
-        na.append(dict(kind="review",label=f"Review {len(pipe)} new matches"))
+        na.append(dict(kind="review",label=f"Review {pipe_meta['total']} new matches"))
     na.append(dict(kind="call",label="Follow up your warm paths & recruiter contacts"))
     avg=round(sum(readiness(a["company"]) for a in active)/len(active)) if active else 0
     return dict(
         stats=dict(tracked=len([a for a in A if a["status"].upper()!="SKIP"]),applied=cnt("Applied"),
                    interviewing=cnt("Interview","Responded"),offers=cnt("Offer","Hired"),
-                   newmatches=len(pipe),prep_avg=avg,mock=nm),
+                   newmatches=pipe_meta["total"],prep_avg=avg,mock=nm),
         pipeline=pipeline, new_matches=pipe, next_actions=na, standing_gaps=sg,
         profile=profile(), scan=scan_coverage(), setup=setup_status(), readiness=readiness_summary(),
+        new_hidden=pipe_hidden, new_meta=pipe_meta,
         ignored=list(reversed(_ignored_rows()))[:40],
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -1319,9 +1633,12 @@ details summary{color:var(--accent2)}
 <div id="v-discover" style="display:none">
   <div class="disc">
     <div class="panel" style="margin-bottom:16px"><h2>🛰 Scan coverage</h2><div id="scancov" class="sm muted">loading…</div></div>
-    <div class="panel" style="margin-bottom:16px"><h2>🆕 New matches · last 7 days · best fit first</h2>
+    <div class="panel" style="margin-bottom:16px"><h2 id="nmtitle">🆕 New matches</h2>
+      <div id="nmwin" class="sm muted" style="margin:-4px 0 4px"></div>
+      <div id="nmhidden" class="sm muted" style="margin:0 0 10px"></div>
       <table><thead><tr><th>Fit</th><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
-      <div class="sm muted" style="margin-top:8px">Fit = a quick title/location heuristic vs your profile — the full score comes when you Select &amp; evaluate.</div>
+      <div id="nmmore" style="margin-top:10px"></div>
+      <div class="sm muted" style="margin-top:8px">Only roles you have never seen appear here — anything ignored, selected or applied to is filtered out by its company+role hash. Staffing agencies and aggregators are pushed to the bottom, never hidden. Fit = a quick title/location heuristic vs your profile; the full score comes when you Select &amp; evaluate.</div>
     </div>
     <div class="panel" style="margin-bottom:16px"><details><summary style="cursor:pointer;font-weight:600;color:var(--muted)">🚫 Ignored / seen (<span id="igncount">0</span>) — hidden from Discover</summary>
       <table style="margin-top:10px"><thead><tr><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="ignored"></tbody></table>
@@ -1360,6 +1677,42 @@ function view(v){
   document.getElementById('tab-discover').classList.toggle('on',v==='discover');
 }
 
+function renderDiscover(){
+  var MT=DATA.new_meta||{days:14,shown:40,total:(DATA.new_matches||[]).length,sent:(DATA.new_matches||[]).length};
+  (function(){var t=document.getElementById('nmtitle');if(t)t.textContent='🆕 New matches \u00b7 last '+MT.days+' days \u00b7 best fit first';
+    var w=document.getElementById('nmwin');if(!w)return;
+    var line='Posted '+esc(MT.start||'')+' \u2192 '+esc(MT.end||'')+(MT.total!=null?' \u00b7 '+MT.total+' match'+(MT.total===1?'':'es'):'');
+    if(MT.agencies)line+=' \u00b7 '+MT.agencies+' via agency (ranked last)';
+    if(MT.stale_days!=null&&MT.stale_days>7)line+=' \u00b7 <b style="color:var(--amber)">\u26a0 newest posting is '+MT.stale_days+' days old \u2014 run 🔎 Scan</b>';
+    if(MT.new_count)line+='<div style="margin-top:6px"><b style="color:var(--accent)">\u2b50 '+MT.new_count+' new to you</b> since you last reviewed'+(MT.since?' ('+esc(MT.since)+')':'')+' \u2014 listed first. <button class="sm" onclick="ackDiscover()">\u2713 Mark all reviewed</button></div>';
+    else if(MT.since)line+='<div style="margin-top:6px" class="muted">Nothing new since you last reviewed ('+esc(MT.since)+').</div>';
+    w.innerHTML=line;})();
+  var _all=DATA.new_matches||[]; var _lim=(window._nmAll?_all.length:Math.min(MT.shown||40,_all.length));
+  document.getElementById('nm').innerHTML=(_all.length?_all.slice(0,_lim):[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
+    var args="(this,'"+encodeURIComponent(m.url||'')+"','"+encodeURIComponent(m.company||'')+"','"+encodeURIComponent(m.title||'')+"','"+esc(m.posted||'')+"')";
+    var sel=(m.company&&m.title)?'<button class="sm p" title="Add to your board (To apply)" onclick="selectMatch'+args+'">➕ Select</button> ':'';
+    var ig=m.url?'<button class="sm" title="Hide this role from Discover" onclick="ignoreMatch'+args+'">🚫 Ignore</button>':'';
+    var sc=m.score||0, scc=(sc>=4?'var(--accent)':sc>=3.2?'var(--amber)':'var(--muted)');
+    var sccell=m.company?'<td><b style="color:'+scc+'">'+sc.toFixed(1)+'</b><span class="sm muted">/5</span></td>':'<td></td>';
+    var agy=m.agency?' <span class="sm muted" title="Staffing agency or aggregator \u2014 the real employer is not named">via agency</span>':'';
+    var nw=m.is_new?' <span class="sm" style="background:var(--accent);color:#0b0d10;border-radius:4px;padding:1px 6px;font-weight:700" title="First appeared in Discover after you last marked the list reviewed">NEW</span>':'';
+    return '<tr'+(m.is_new?' style="background:color-mix(in srgb,var(--accent) 9%, transparent)"':(m.agency?' style="opacity:.68"':''))+'>'+sccell+'<td><b>'+esc(m.company)+'</b>'+nw+agy+'</td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
+  (function(){var el=document.getElementById('nmmore');if(!el)return;
+    if(_all.length>_lim){el.innerHTML='<button class="sm" onclick="window._nmAll=true;renderDiscover()">Show all '+MT.total+' \u2193</button> <span class="sm muted">showing '+_lim+' of '+MT.total+(MT.total>MT.sent?' ('+MT.sent+' loaded \u2014 raise JOBHELM_DISCOVER_MAX for more)':'')+'</span>';}
+    else if(window._nmAll&&_all.length>(MT.shown||40)){el.innerHTML='<button class="sm" onclick="window._nmAll=false;renderDiscover()">Show fewer \u2191</button> <span class="sm muted">showing all '+_all.length+'</span>';}
+    else el.innerHTML='';})();
+  (function(){var h=DATA.new_hidden||{},el=document.getElementById('nmhidden');if(!el)return;
+    var order=['applied','interview','responded','offer','hired','evaluated','rejected','discarded','skip','ignored','seen'];
+    var ks=Object.keys(h).sort(function(a,b){var x=order.indexOf(a),y=order.indexOf(b);return (x<0?99:x)-(y<0?99:y)});
+    var tot=ks.reduce(function(n,k){return n+h[k]},0);
+    el.innerHTML = tot ? '\u2713 '+tot+' already-seen listing'+(tot===1?'':'s')+' filtered out ('+
+      ks.map(function(k){return h[k]+' '+esc(k)}).join(' \u00b7 ')+')' : '';})();
+  var ign=DATA.ignored||[];
+  var ib=document.getElementById('ignored');
+  if(ib) ib.innerHTML = ign.length ? ign.map(function(m){
+    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td>'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+'<button class="sm" onclick="unignoreMatch(\\''+encodeURIComponent(m.url)+'\\')">↩ Restore</button></td></tr>'}).join('') : '<tr><td colspan="4" class="muted sm">Nothing ignored yet.</td></tr>';
+  var ic=document.getElementById('igncount'); if(ic) ic.textContent=ign.length;
+}
 async function load(){
   try{DATA=await (await fetch('/api/data')).json();}catch(e){toast('Load failed — is the server running?');return}
   var sc=DATA.scan||{last:{},top:[],boards:0}; var when=(sc.last&&sc.last.when)?sc.last.when:'—';
@@ -1396,18 +1749,7 @@ async function load(){
   renderReadiness();
   document.getElementById('gaps').innerHTML=(DATA.standing_gaps.length?DATA.standing_gaps:['Run a gap analysis to populate this.']).map(function(g){return '<li>'+esc(g)+'</li>'}).join('');
   // discover
-  document.getElementById('nm').innerHTML=(DATA.new_matches.length?DATA.new_matches:[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
-    var args="(this,'"+encodeURIComponent(m.url||'')+"','"+encodeURIComponent(m.company||'')+"','"+encodeURIComponent(m.title||'')+"','"+esc(m.posted||'')+"')";
-    var sel=(m.company&&m.title)?'<button class="sm p" title="Add to your board (To apply)" onclick="selectMatch'+args+'">➕ Select</button> ':'';
-    var ig=m.url?'<button class="sm" title="Hide from Discover" onclick="ignoreMatch'+args+'">🚫 Ignore</button>':'';
-    var sc=m.score||0, scc=(sc>=4?'var(--accent)':sc>=3.2?'var(--amber)':'var(--muted)');
-    var sccell=m.company?'<td><b style="color:'+scc+'">'+sc.toFixed(1)+'</b><span class="sm muted">/5</span></td>':'<td></td>';
-    return '<tr>'+sccell+'<td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
-  var ign=DATA.ignored||[];
-  var ib=document.getElementById('ignored');
-  if(ib) ib.innerHTML = ign.length ? ign.map(function(m){
-    return '<tr><td><b>'+esc(m.company)+'</b></td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td>'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+'<button class="sm" onclick="unignoreMatch(\\''+encodeURIComponent(m.url)+'\\')">↩ Restore</button></td></tr>'}).join('') : '<tr><td colspan="4" class="muted sm">Nothing ignored yet.</td></tr>';
-  var ic=document.getElementById('igncount'); if(ic) ic.textContent=ign.length;
+  renderDiscover();
   if(_openNum!=null){var p=byNum(_openNum);if(p)renderDrawer(p);}
 }
 async function ignoreMatch(btn,url,co,title,posted){
@@ -1415,6 +1757,7 @@ async function ignoreMatch(btn,url,co,title,posted){
   await postJSON('/api/ignore',{url:decodeURIComponent(url),company:decodeURIComponent(co),title:decodeURIComponent(title),posted:posted});
   toast('Ignored — hidden from Discover'); load();
 }
+async function ackDiscover(){ var r=await postJSON('/api/ack_discover',{}); toast(r.msg||'Marked reviewed'); window._nmAll=false; load(); }
 async function unignoreMatch(url){ await postJSON('/api/unignore',{url:decodeURIComponent(url)}); toast('Restored to Discover'); load(); }
 async function selectMatch(btn,url,co,title,posted){
   if(btn){btn.disabled=true; btn.textContent='… adding';}
@@ -1755,6 +2098,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/setup": self._send(200,json.dumps(do_setup(args)))
         elif p=="/api/ignore": self._send(200,json.dumps(do_ignore(args.get("url",""),args.get("company",""),args.get("title",""),args.get("posted",""))))
         elif p=="/api/unignore": self._send(200,json.dumps(do_unignore(args.get("url",""))))
+        elif p=="/api/ack_discover": self._send(200,json.dumps(do_ack_discover()))
         elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
         elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
@@ -1780,7 +2124,27 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/mock_finish": self._send(200,json.dumps(do_mock_finish(args.get("num"),args.get("history",[]))))
         else: self._send(404,"{}")
 
+def _assert_pages_encodable():
+    """Fail loudly at startup instead of 500-ing every page load.
+
+    PAGE/FLASHCARDS_PAGE are plain (non-raw) Python strings, so a JS-style astral
+    escape written as \\uD83C\\uDD95 is decoded at parse time into two LONE
+    SURROGATES. Those look fine in the source and import without complaint, but
+    _send()'s .encode() then raises UnicodeEncodeError on every request and the
+    dashboard serves an empty response. Write astral emoji as literal characters.
+    """
+    for name, page in (("PAGE", PAGE), ("FLASHCARDS_PAGE", FLASHCARDS_PAGE)):
+        try:
+            page.encode()
+        except UnicodeEncodeError as e:
+            bad = [(i, hex(ord(c))) for i, c in enumerate(page) if 0xD800 <= ord(c) <= 0xDFFF][:5]
+            raise SystemExit(
+                f"\n⚠️  {name} contains unencodable characters and would 500 on every load.\n"
+                f"   {e}\n   Lone surrogates at (index, codepoint): {bad}\n"
+                f"   Fix: write astral emoji as literal characters, not \\uXXXX escape pairs.\n")
+
 if __name__=="__main__":
+    _assert_pages_encodable()
     ThreadingHTTPServer.allow_reuse_address = True   # avoid TIME_WAIT rebind failures
     try:
         srv=ThreadingHTTPServer((HOST,PORT),H)

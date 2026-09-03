@@ -8,3 +8,8 @@ openrouter.env
 node_modules/
 .DS_Store
 __pycache__/
+# JobHelm runtime state — written next to your career-ops data, never source
+**/jobhelm-seen.tsv
+**/jobhelm-discover-ack.txt
+**/jobhelm-ignored.tsv
+**/jobhelm-agencies.txt

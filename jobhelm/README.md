@@ -14,7 +14,7 @@ Kanban board  →  drill into a role  →  prep readiness + gaps
 - **Pipeline board** — Kanban of every application by stage (To apply → Applied → In touch → Interview → Offer), with search + filters
 - **Prep readiness** — honest per-role readiness based on *actual practice* (a mock rep with a scorecard), with prep materials tracked separately
 - **In-app rehearse** — a full mock interview in the browser: questions read aloud (browser TTS), you type or dictate, feedback + scorecard, saved as a transcript. No Terminal, no extra tooling.
-- **Discover** — turns the scan firehose into a ranked shortlist of relevant, recent, in-location roles. Coverage spans **ATS at the source** (Greenhouse, Lever, Ashby, Workday, iCIMS — via career-ops) **plus the consumer aggregators** (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google — via [JobSpy](https://github.com/speedyapply/JobSpy), when its venv is set up) and niche remote boards. The 🔎 Scan button runs both. See the [roadmap](../ROADMAP.md) for the full 360° vision.
+- **Discover** — turns the scan firehose into a ranked shortlist of relevant, recent, in-location roles, and **shows each role once**: anything you have ignored, selected, or applied to is suppressed by a normalized company+role hash (not a fragile URL match), the same posting listed by an ATS and by an aggregator collapses to one row, staffing agencies are ranked last rather than hidden, and roles that are new since you last reviewed are flagged and listed first. Coverage spans **ATS at the source** (Greenhouse, Lever, Ashby, Workday, iCIMS — via career-ops) **plus the consumer aggregators** (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google — via [JobSpy](https://github.com/speedyapply/JobSpy), when its venv is set up) and niche remote boards. The 🔎 Scan button runs both. See the [roadmap](../ROADMAP.md) for the full 360° vision.
 - **Draft replies** — draft recruiter/HM responses in your voice with your contact details; flags spam; never auto-sends
 - **Prep packs** — per role, a JD-specific set of **interview questions + model answers**, a **leadership brief**, and a **stack/articles guide**, all grounded in your CV and combined into one printable doc. Company briefs too. A metric-trace check flags any number in the pack that isn't in your CV, so you never rehearse an inflated figure.
 - **Next best actions** — follow-ups due, prep gaps, warm-path reminders, at a glance
@@ -91,6 +91,8 @@ Runs the sample board by default. Mount your own career-ops / DeskMock and set `
 | `JOBHELM_NAME` / `JOBHELM_MOBILE` / `JOBHELM_EMAIL` | empty | your identity, used in reply drafts (or set them in `career-ops/config/profile.yml`) |
 | `JOBHELM_PROFILE` | `a candidate` | one line describing the roles you target — steers reply drafts |
 | `JOBHELM_LOCATIONS` | `remote\|anywhere\|united states\|us` | regex of location keywords to keep in Discover |
+| `JOBHELM_DISCOVER_DAYS` | `14` | how old a posting may be to appear in Discover, counted from **today** |
+| `JOBHELM_DISCOVER_SHOWN` / `JOBHELM_DISCOVER_MAX` | `40` / `200` | rows rendered before "show all", and rows sent to the browser |
 | `JOBHELM_PORT` / `JOBHELM_HOST` | `8899` / `127.0.0.1` | where the server binds |
 | `JOBHELM_JOBSPY` | — | path to a Python with [JobSpy](https://github.com/speedyapply/JobSpy) installed (`pip install python-jobspy`); enables the LinkedIn/Indeed/etc. leg of 🔎 Scan |
 | `OPENROUTER_API_KEY` / `JOBHELM_API_KEY` | — | your LLM key (or drop an `openrouter.env` next to the script) |

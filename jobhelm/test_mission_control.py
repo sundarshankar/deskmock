@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """JobHelm — unit/logic tests against the bundled sample data. No side effects
 (Terminal launch is stubbed; no LLM/network calls)."""
-import os, sys, importlib.util, pathlib
+import os, sys, importlib.util, pathlib, datetime
 
 HERE = pathlib.Path(__file__).resolve().parent
 # Point the app at the bundled sample data BEFORE import (module reads env at import time).
@@ -106,6 +106,48 @@ try:
     check("_open_file returns True when a launcher succeeds", mc._open_file("/tmp/nonexistent.pdf") is True)
 finally:
     mc.subprocess.Popen = _origPopen
+
+print("== Discover suppression: seen/applied roles must not resurface ==")
+# role hash folds the label differences that made one posting look like several
+check("Sr. == Senior in a role hash",
+      mc.role_hash("Acme", "Sr. Director, Platform Engineering")
+      == mc.role_hash("Acme", "Senior Director, Platform Engineering"))
+check("VP == Vice President, and '(Remote)' is not identity",
+      mc.role_hash("Acme", "VP of Engineering")
+      == mc.role_hash("Acme", "Vice President of Engineering (Remote)"))
+check("ATS slug and display name are one employer", mc._co_match("wex", "wexinc"))
+check("long shared prefix collapses a tenant slug", mc._co_match("lightspeedhq", "lightspeedcommerce"))
+check("distinct employers stay distinct", not mc._co_match("nvidia", "visa"))
+check("a short slug cannot swallow a longer name", not mc._co_match("jj", "jjill"))
+
+# tracker rows suppress, whatever their status — Discover kept re-listing applied roles
+_apps = mc.apps()
+if _apps:
+    _a = _apps[0]
+    _idx = mc.suppressed_index()
+    check("a tracked role is suppressed by company+role, not by URL",
+          bool(mc.suppression_reason(_a["company"], _a["role"], "https://example.invalid/never-seen", _idx)),
+          f'{_a["company"]} / {_a["role"]}')
+    check("an unrelated role is not suppressed",
+          not mc.suppression_reason("Nonesuch Industries", "Chief Zamboni Officer", "https://example.invalid/x", _idx))
+
+# agencies are demoted, never hidden — and never at the cost of a real employer
+check("a staffing firm is recognised", mc.is_agency("BizTech Staffing"))
+check("an aggregator is recognised", mc.is_agency("Ladders") and mc.is_agency("jobgether"))
+check("de-spaced slugs are recognised too", mc.is_agency("talentmanagementsolution"))
+check("a real employer is not flagged as an agency",
+      not any(mc.is_agency(c) for c in ("Visa", "Experian", "Partners Healthcare", "Antares Capital LP")))
+
+_rows, _hidden, _meta = mc.pipeline_recent()
+check("pipeline_recent returns rows, hidden counts and meta", isinstance(_rows, list) and isinstance(_meta, dict))
+check("the age window is anchored to today, not to the newest row",
+      _meta["end"] == datetime.date.today().isoformat(), _meta.get("end"))
+check("the true match total is reported, not the truncated count",
+      _meta["total"] >= len(_rows[:_meta["shown"]]))
+check("every row carries a stable role key", all(r.get("key") for r in _rows))
+check("agencies never outrank a real employer",
+      [r["agency"] for r in _rows] == sorted((r["agency"] for r in _rows), key=lambda a: (a,))
+      or all(r["is_new"] for r in _rows if r["agency"]))
 
 print(f"\n==== {PASS} passed, {FAIL} failed ====")
 sys.exit(1 if FAIL else 0)
