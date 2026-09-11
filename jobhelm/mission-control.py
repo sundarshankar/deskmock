@@ -677,6 +677,19 @@ def do_reject(num):
     ok,out=run(["node","set-status.mjs",str(num),"Rejected","--note","Marked Rejected via JobHelm"],CO)
     return dict(ok=ok, msg="Marked Rejected ✓ — removed from the active board." if ok else f"Failed: {out[-200:]}")
 
+# Forward stage moves (Applied -> Responded -> Interview -> Offer -> Hired). The board
+# had no way to record a reply short of an interview, so anything that came back from a
+# company stayed parked in Applied. Labels must match templates/states.yml exactly —
+# set-status.mjs validates against it and refuses anything else.
+STAGE_LABELS = {"evaluated":"Evaluated","applied":"Applied","responded":"Responded",
+                "interview":"Interview","offer":"Offer","hired":"Hired"}
+
+def do_stage(num, state):
+    label = STAGE_LABELS.get((state or "").strip().lower())
+    if not label: return dict(ok=False, msg=f"Unknown stage '{state}'.")
+    ok,out=run(["node","set-status.mjs",str(num),label,"--note",f"Moved to {label} via JobHelm Mission Control"],CO)
+    return dict(ok=ok, msg=f"Moved to {label} ✓" if ok else f"Failed: {out[-200:]}")
+
 # ---------- Apply Queue: prepare in bulk, submit one at a time ----------
 # The bottleneck in applying to many roles is preparation, not the Submit click:
 # tailoring, drafting screening answers, and digging the apply URL out of the JD.
@@ -1701,6 +1714,10 @@ header{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px
 /* board */
 .board{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
 .col{flex:0 0 268px;background:var(--soft);border-radius:12px;padding:9px;min-height:120px}
+.col{transition:background .12s,outline-color .12s;outline:2px dashed transparent;outline-offset:-2px}
+.col.drop-ok{outline-color:var(--line)}
+.col.over{outline-color:var(--accent);background:var(--card)}
+.kc.dragging{opacity:.4;cursor:grabbing}
 .col h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:2px 4px 9px;display:flex;justify-content:space-between}
 .col h3 .c{background:var(--card);border-radius:20px;padding:0 8px;color:var(--ink)}
 .kc{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:9px;cursor:pointer;box-shadow:var(--shadow);transition:transform .1s,box-shadow .1s,border-color .1s}
@@ -1781,6 +1798,7 @@ details summary{color:var(--accent2)}
   <div class="controls">
     <input id="q" placeholder="Search company or role…" oninput="renderBoard()">
     <div class="chips" id="stagechips"></div>
+    <span class="sm muted" style="margin-left:auto">Drag a card to another column to change its stage</span>
   </div>
   <div class="main">
     <div class="board" id="board"></div>
@@ -1842,6 +1860,24 @@ function byNum(n){return DATA.pipeline.find(function(p){return String(p.num)===S
 function fieldPack(){var P=DATA.profile||{};return ['Name: '+(P.name||''),'Email: '+(P.email||''),'Phone: '+(P.phone||''),'Location: '+(P.location||''),'LinkedIn: '+(P.linkedin||''),'Website: '+(P.website||'')].join('\\n');}
 function stageOf(status){var s=(status||'').toLowerCase();for(var i=0;i<STAGES.length;i++){if(s.indexOf(STAGES[i][0])>=0)return STAGES[i][0]}
   if(s.indexOf('hired')>=0)return 'offer'; return 'applied'}
+
+/* Buttons that walk a role forward one column at a time. Evaluated -> Applied keeps
+   going through /api/apply because that path also archives the resume you sent;
+   every later hop is a plain status write. Every stage ahead of the current one is
+   offered, so a role that jumps straight from Applied to Interview needs one click. */
+function stageBtns(p){
+  var cur=stageOf(p.status), i=0, h='';
+  for(var k=0;k<STAGES.length;k++){if(STAGES[k][0]===cur)i=k}
+  for(var j=i+1;j<STAGES.length;j++){
+    var key=STAGES[j][0], lab=STAGES[j][1];
+    var call=(key==='applied')?'act(\\'apply\\',{num:\\''+p.num+'\\'})'
+                              :'act(\\'stage\\',{num:\\''+p.num+'\\',state:\\''+key+'\\'})';
+    h+='<button class="sm'+(j===i+1?' p':'')+'" onclick="'+call+'">'
+      +(key==='applied'?'✓ Mark applied':'→ '+lab)+'</button> ';
+  }
+  if(cur==='offer') h+='<button class="sm" title="Offer accepted" onclick="if(confirm(\\'Mark '+esc(p.company)+' Hired? \\'))act(\\'stage\\',{num:\\''+p.num+'\\',state:\\'hired\\'})">\U0001F389 Hired</button> ';
+  return h;
+}
 
 function view(v){
   document.getElementById('v-board').style.display=v==='board'?'':'none';
@@ -2055,9 +2091,12 @@ function card(p){
   var qa='';
   var st=stageOf(p.status);
   if(st==='evaluated') qa='<button class="sm p" onclick="event.stopPropagation();act(\\'apply\\',{num:\\''+p.num+'\\'})">Mark applied</button> <button class="sm" title="Remove from board" onclick="event.stopPropagation();if(confirm(\\'Unselect '+esc(p.company)+' — remove from your board?\\'))act(\\'unselect\\',{num:\\''+p.num+'\\'})">↩ Unselect</button>';
+  else if(st==='applied') qa='<button class="sm p" title="They replied — move to In touch" onclick="event.stopPropagation();act(\\'stage\\',{num:\\''+p.num+'\\',state:\\'responded\\'})">📬 In touch</button> <button class="sm" onclick="event.stopPropagation();act(\\'stage\\',{num:\\''+p.num+'\\',state:\\'interview\\'})">🗓 Interview</button>';
   else if(!p.hasq) qa='<button class="sm" onclick="event.stopPropagation();act(\\'questions\\',{num:\\''+p.num+'\\'})">Gen Qs</button>';
   else qa='<button class="sm" onclick="event.stopPropagation();openMock(\\''+p.num+'\\')">Rehearse</button>';
-  return '<div class="kc" onclick="openDrawer(\\''+p.num+'\\')">'+
+  return '<div class="kc" draggable="true" data-num="'+esc(String(p.num))+'"'+
+    ' ondragstart="dragStart(event,\\''+p.num+'\\')" ondragend="dragEnd(event)"'+
+    ' onclick="openDrawer(\\''+p.num+'\\')" title="Drag to another column to change its stage">'+
     '<div class="top"><div><div class="co">'+esc(p.company)+'</div></div><span class="score">'+esc(p.score)+'</span></div>'+
     '<div class="ro">'+esc(p.role)+'</div>'+
     '<div class="rb"><i style="width:'+p.ready+'%;background:'+rc(p.ready)+'"></i></div>'+
@@ -2083,13 +2122,63 @@ function renderReadiness(){
   var btn=r.weakest?'<button class="sm p" style="margin-top:9px" onclick="if(confirm(\\'Generate an escalated '+r.weakest+' drill (your weakest area)? ~40s\\'))act(\\'drill\\',{dim:\\''+r.weakest+'\\'})">🎯 Drill weakest — '+r.weakest+'</button>':'';
   el.innerHTML=rows+btn;
 }
+/* ---------- drag a card between columns ----------------------------------
+   The buttons still exist (and are the only path on a touch screen), but on a
+   Kanban board the obvious gesture is to drag the card. A drop writes the same
+   status through /api/stage that the buttons do; Evaluated -> Applied is routed
+   to /api/apply instead because that path also archives the resume you sent.
+   The card moves the moment you drop it and the server reload reconciles, so a
+   ~1s node spawn never looks like a dropped gesture. */
+var _drag=null;
+function colEls(){return Array.prototype.slice.call(document.querySelectorAll('#board .col'))}
+function dragStart(e,num){
+  _drag=String(num);
+  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',_drag)}catch(_){}
+  e.currentTarget.classList.add('dragging');
+  var p=byNum(_drag), cur=p?stageOf(p.status):null;
+  colEls().forEach(function(c){if(c.getAttribute('data-stage')!==cur)c.classList.add('drop-ok')});
+}
+function dragEnd(){
+  _drag=null;
+  var d=document.querySelector('.kc.dragging'); if(d)d.classList.remove('dragging');
+  colEls().forEach(function(c){c.classList.remove('drop-ok');c.classList.remove('over')});
+}
+function dragOver(e){
+  if(!_drag)return;
+  e.preventDefault(); try{e.dataTransfer.dropEffect='move'}catch(_){}
+  e.currentTarget.classList.add('over');
+}
+function dragLeave(e){
+  /* dragleave also fires crossing into a child, which would strobe the outline */
+  if(e.relatedTarget&&e.currentTarget.contains(e.relatedTarget))return;
+  e.currentTarget.classList.remove('over');
+}
+function dropCard(e,stage){
+  e.preventDefault();
+  var num=_drag||(e.dataTransfer?e.dataTransfer.getData('text/plain'):'');
+  dragEnd();
+  var p=byNum(num); if(!p)return;
+  var cur=stageOf(p.status);
+  if(cur===stage)return;
+  var lab=''; for(var i=0;i<STAGES.length;i++){if(STAGES[i][0]===stage)lab=STAGES[i][1]}
+  var back=false, ci=-1, ti=-1;
+  for(var k=0;k<STAGES.length;k++){if(STAGES[k][0]===cur)ci=k; if(STAGES[k][0]===stage)ti=k}
+  back = ti<ci;
+  if(back && !confirm('Move '+p.company+' back to '+lab+'?'))return;
+  p.status=stage;               /* the stage KEY, not the column label: stageOf() matches on the key */
+  renderBoard();
+  if(stage==='applied'&&cur==='evaluated') act('apply',{num:num});
+  else act('stage',{num:num,state:stage});
+}
 function renderBoard(){
   var q=(document.getElementById('q').value||'').toLowerCase();
   var cols=STAGES.filter(function(st){return FILTER===null||FILTER===st[0]});
   document.getElementById('board').innerHTML=cols.map(function(st){
     var items=DATA.pipeline.filter(function(p){return stageOf(p.status)===st[0] &&
       (!q || (p.company+' '+p.role).toLowerCase().indexOf(q)>=0)});
-    return '<div class="col"><h3>'+st[1]+'<span class="c">'+items.length+'</span></h3>'+
+    return '<div class="col" data-stage="'+st[0]+'" ondragover="dragOver(event)"'+
+      ' ondragleave="dragLeave(event)" ondrop="dropCard(event,\\''+st[0]+'\\')">'+
+      '<h3>'+st[1]+'<span class="c">'+items.length+'</span></h3>'+
       (items.length?items.map(card).join(''):'<div class="empty">—</div>')+'</div>';
   }).join('');
 }
@@ -2143,7 +2232,7 @@ function renderDrawer(p){
       '<button class="sm" title="Comp benchmark + leverage + scripts" onclick="if(confirm(\\'Generate salary-negotiation prep for '+esc(p.company)+'? Comp figures are estimates to verify. ~40s\\'))act(\\'negotiation\\',{num:\\''+p.num+'\\'})">💰 Negotiation prep</button>'+
     '</div><div class="sm muted" style="margin-top:6px">Each dimension is JD-tailored + CV-grounded — leadership brief, technical Q&amp;A, behavioral STAR, and a stack/articles reading guide.</div></div>'+
     '<div class="sec"><div class="h">Update stage</div><div class="actions">'+
-      (stageOf(p.status)==='evaluated'?'<button class="sm p" onclick="act(\\'apply\\',{num:\\''+p.num+'\\'})">✓ Mark applied</button>':'')+
+      stageBtns(p)+
       '<button class="sm" title="Posting closed / cancelled / no longer available" onclick="if(confirm(\\'Discard '+esc(p.company)+'? (posting closed / not available) — it drops off the active board.\\'))act(\\'discard\\',{num:\\''+p.num+'\\'})">🗑 Discard (not available)</button>'+
       '<button class="sm" title="Rejected by the company" onclick="if(confirm(\\'Mark '+esc(p.company)+' Rejected? It drops off the active board.\\'))act(\\'reject\\',{num:\\''+p.num+'\\'})">✗ Rejected</button>'+
     '</div></div>'+
@@ -2386,6 +2475,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/queue_skip": self._send(200,json.dumps(do_queue_skip(args.get("num"))))
         elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
         elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
+        elif p=="/api/stage": self._send(200,json.dumps(do_stage(args.get("num"),args.get("state"))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
         elif p=="/api/draft": self._send(200,json.dumps(do_draft(args.get("message",""))))
         elif p=="/api/open":  self._send(200,json.dumps(do_open(args.get("co",""))))

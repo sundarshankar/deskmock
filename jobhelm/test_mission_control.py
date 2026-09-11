@@ -11,6 +11,10 @@ os.environ["JOBHELM_MOCK"]      = str(HERE / "sample-data" / "mock")
 os.environ.setdefault("JOBHELM_NAME",   "Alex Rivera")
 os.environ.setdefault("JOBHELM_MOBILE", "555-0100")
 os.environ.setdefault("JOBHELM_EMAIL",  "alex.rivera@example.com")
+# The sample postings carry fixed dates, but Discover's age window is anchored to
+# TODAY — so the relevance tests below rot into failures purely by the calendar
+# moving. Open the window wide here and test the window itself separately.
+os.environ["JOBHELM_DISCOVER_DAYS"] = "36500"
 
 spec = importlib.util.spec_from_file_location("mc", str(HERE / "mission-control.py"))
 mc = importlib.util.module_from_spec(spec); spec.loader.exec_module(mc)
@@ -45,6 +49,13 @@ print("== new-matches filter ==")
 coms = [m["company"] for m in st["new_matches"]]
 check("keeps senior platform/infra roles", ("Skyforge" in coms or "Meridian Labs" in coms), coms)
 check("drops off-target (Sales Enablement)", "Fernwood Retail" not in coms, coms)
+
+# ...and the window itself: with a 1-day window nothing from the fixed sample dates survives.
+_wide = mc.DISCOVER_DAYS
+mc.DISCOVER_DAYS = 1
+check("the age window drops stale postings", not mc.build_state()["new_matches"])
+mc.DISCOVER_DAYS = _wide
+check("reopening the window brings them back", len(mc.build_state()["new_matches"]) > 0)
 
 print("== follow-ups resolve company names ==")
 fu = mc.followups_due()
@@ -173,6 +184,49 @@ check("an applied role is not re-queued",
 check("prepare_batch refuses an empty selection", mc.do_prepare_batch([])["ok"] is False)
 check("prepare_batch caps a runaway batch", mc.do_prepare_batch([{"company":"C","title":"T"}]*51)["ok"] is False)
 
+print("== stage moves: the board can walk a role forward (and back) ==")
+# The board used to be able to say "Applied" and nothing after it, so a company
+# that replied stayed parked in Applied forever. These cover the write path the
+# stage buttons and the drag-and-drop both call.
+_stage_calls = []
+_real_run = mc.run
+mc.run = lambda cmd, cwd: (_stage_calls.append(cmd), (True, ""))[1]
+
+for _key, _label in [("responded", "Responded"), ("interview", "Interview"),
+                     ("offer", "Offer"), ("hired", "Hired"), ("evaluated", "Evaluated")]:
+    _stage_calls.clear()
+    _r = mc.do_stage("5", _key)
+    _cmd = _stage_calls[0] if _stage_calls else []
+    check(f"'{_key}' writes the canonical label '{_label}'",
+          _r["ok"] and _cmd[:2] == ["node", "set-status.mjs"] and _cmd[3] == _label, f"{_r} {_cmd}")
+
+_stage_calls.clear()
+_r = mc.do_stage("5", "MADE-UP")
+check("an unknown stage is refused before shelling out", _r["ok"] is False and not _stage_calls, f"{_r} {_stage_calls}")
+_stage_calls.clear()
+_r = mc.do_stage("5", "")
+check("an empty stage is refused before shelling out", _r["ok"] is False and not _stage_calls, f"{_r} {_stage_calls}")
+
+_stage_calls.clear()
+mc.run = lambda cmd, cwd: (_stage_calls.append(cmd), (False, "boom"))[1]
+_r = mc.do_stage("5", "responded")
+check("a failed write is reported, not swallowed", _r["ok"] is False and "boom" in _r["msg"], _r)
+mc.run = _real_run
+
+# set-status.mjs validates the label against templates/states.yml and rejects anything
+# else, so a typo here would only surface at click time. Check it against the real file
+# when one is reachable (dev checkout); the sample data ships without it.
+_states = mc.CO / "templates" / "states.yml"
+if _states.exists():
+    import re as _re2
+    _labels = set(_re2.findall(r"^\s*label:\s*(.+?)\s*$", mc.read(_states), _re2.M))
+    _bad = [v for v in mc.STAGE_LABELS.values() if v not in _labels]
+    check("every STAGE_LABELS value is a canonical state", not _bad, f"unknown: {_bad}")
+else:
+    print("  skip canonical-state cross-check (no templates/states.yml in sample data)")
+
+check("/api/stage is routed", '/api/stage' in mc.read(HERE / "mission-control.py"))
+
 print("== the page's JavaScript actually parses (escaping guard) ==")
 # PAGE is a non-raw Python string, so a JS escape written with one backslash is
 # eaten before the browser sees it. That has broken this page three separate ways
@@ -189,6 +243,74 @@ if shutil.which("node"):
     os.unlink(_pathjs)
 else:
     print("  skip node --check (node not installed)")
+
+
+print("== drag-and-drop: the gesture maps to the right write ==")
+# The card is moved optimistically and the server reconciles, so a wrong key here
+# would put the card in a column the reload then yanks it out of. Run the real
+# source of stageOf()/dropCard() in node against stubs rather than re-describing it.
+if shutil.which("node"):
+    _page = mc.PAGE
+    _stages_src = _re.search(r"var STAGES=\[.*?\];", _page, _re.S).group(0)
+    _stageof_src = _re.search(r"function stageOf\(status\)\{.*?return 'applied'\}", _page, _re.S).group(0)
+    _drop_src = _re.search(r"function dropCard\(e,stage\)\{.*?\n\}", _page, _re.S).group(0)
+    _harness = _stages_src + "\n" + _stageof_src + "\n" + _drop_src + r"""
+var CALLS=[], CONFIRMS=[], ANSWER=true, ROW=null;
+function act(kind,args){CALLS.push({kind:kind,args:args})}
+function byNum(n){return ROW}
+function renderBoard(){}
+function dragEnd(){}
+function confirm(m){CONFIRMS.push(m);return ANSWER}
+function drop(fromStatus,toStage,answer){
+  CALLS=[];CONFIRMS=[];ANSWER=(answer===undefined?true:answer);
+  ROW={num:'7',company:'Acme',status:fromStatus};
+  _drag='7';
+  dropCard({preventDefault:function(){},dataTransfer:null},toStage);
+  return {calls:CALLS,confirms:CONFIRMS,landedOn:ROW.status};
+}
+var out={};
+out.sameColumn      = drop('Applied','applied');
+out.appliedToInTouch= drop('Applied','responded');
+out.evaluatedToApplied = drop('Evaluated','applied');
+out.appliedToInterview = drop('Applied','interview');
+out.backwardsAccepted  = drop('Interview','applied',true);
+out.backwardsDeclined  = drop('Interview','applied',false);
+out.stageOfKeys = STAGES.map(function(s){return s[0]+'->'+stageOf(s[0])});
+console.log(JSON.stringify(out));
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as _f:
+        _f.write(_harness); _hp = _f.name
+    _out = subprocess.run(["node", _hp], capture_output=True, text=True)
+    os.unlink(_hp)
+    if _out.returncode != 0:
+        check("the drag-and-drop harness runs", False, _out.stderr[:300])
+    else:
+        import json as _json
+        _o = _json.loads(_out.stdout.strip().splitlines()[-1])
+        check("a drop on the card's own column writes nothing",
+              not _o["sameColumn"]["calls"] and not _o["sameColumn"]["confirms"], _o["sameColumn"])
+        check("Applied -> In touch writes state 'responded'",
+              _o["appliedToInTouch"]["calls"] == [{"kind":"stage","args":{"num":"7","state":"responded"}}],
+              _o["appliedToInTouch"]["calls"])
+        check("Applied -> Interview skips a column cleanly",
+              _o["appliedToInterview"]["calls"] == [{"kind":"stage","args":{"num":"7","state":"interview"}}],
+              _o["appliedToInterview"]["calls"])
+        check("To apply -> Applied goes through /api/apply (it archives the résumé you sent)",
+              _o["evaluatedToApplied"]["calls"] == [{"kind":"apply","args":{"num":"7"}}],
+              _o["evaluatedToApplied"]["calls"])
+        check("a backwards drag asks before writing",
+              len(_o["backwardsAccepted"]["confirms"]) == 1 and _o["backwardsAccepted"]["calls"],
+              _o["backwardsAccepted"])
+        check("declining a backwards drag writes nothing",
+              not _o["backwardsDeclined"]["calls"], _o["backwardsDeclined"])
+        check("the optimistic card carries the stage KEY, not the column label",
+              _o["appliedToInTouch"]["landedOn"] == "responded", _o["appliedToInTouch"]["landedOn"])
+        check("every stage key resolves to its own column",
+              all(k.split("->")[0] == k.split("->")[1] for k in _o["stageOfKeys"]), _o["stageOfKeys"])
+    check("cards are draggable", 'draggable="true"' in _page and "dragStart(event" in _page)
+    check("columns are drop targets", 'data-stage="' in _page and "ondrop=" in _page and "dragOver(event)" in _page)
+else:
+    print("  skip drag-and-drop behaviour (node not installed)")
 
 print(f"\n==== {PASS} passed, {FAIL} failed ====")
 sys.exit(1 if FAIL else 0)
