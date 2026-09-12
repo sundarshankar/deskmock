@@ -1190,7 +1190,7 @@ def _gen_leadership_for(a):
          "## My leadership narrative\n3-4 first-person talking points that map the candidate's REAL experience to "
          "those themes (STAR-ish; use [add a specific example]/[add your metric] where the CV lacks a detail).\n"
          "## Likely leadership questions\n5-6 questions with a one-line angle each on how to answer from the CV.")
-    real=[q for d,q in question_bank_for(company) if d.lower().startswith("lead")]
+    real=real_questions_for(company,"leadership")
     realblk=("\n\nREAL leadership questions already asked at "+company+" (prepare these):\n"+"\n".join("- "+q for q in real[:6])) if real else ""
     usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth):\n{cv}{realblk}\n\nProduce the leadership brief."
     try: md=_llm([{"role":"system","content":sys},{"role":"user","content":usr}],key,2600)
@@ -1307,7 +1307,7 @@ def _gen_qset_for(a, dim):
          + _ATTR_RULE + "Where a number/example would help but is NOT in the CV, insert [add your metric]/[add a specific "
          "example] — never invent. First person throughout; no candidate-name line or [PERSON_NAME] placeholder.")
     # real questions this company already asked (from past debriefs) — prioritize preparing them
-    real=[q for d,q in question_bank_for(company) if d.lower().startswith(dim[:4])]
+    real=real_questions_for(company,dim)
     realblk=("\n\nREAL questions already asked at "+company+" (from a past interview — PREPARE THESE FIRST, then add "
              "others):\n"+"\n".join("- "+q for q in real[:8])) if real else ""
     usr=f"Role: {role} at {company}.\n\n"+(f"JOB DESCRIPTION (target the questions to THIS posting):\n{jd}\n\n" if jd else "")+f"Candidate CV (only source of truth):\n{cv}{realblk}\n\nProduce the {label} set."
@@ -1574,6 +1574,23 @@ def do_debrief(num, notes):
     out.write_text(header+f"\n## Debrief — {ts}\n\n{body}\n\n---\n")
     prep_files.append(out.name)
     return dict(ok=True, msg=f"Debrief saved ✓ — {nq} real questions added to your question bank. They'll sharpen future prep for {company} and similar roles.")
+
+def real_questions_for(company, dim):
+    """Questions this company actually asked, routed to the prep set that should carry them.
+
+    A debrief tags each captured question [Leadership]/[Technical]/[Behavioral]/[Other],
+    and an exact-prefix match used to be the only route into a prep set. That silently
+    stranded every [Other] question — and a recruiter screen is nearly all [Other]
+    ("walk me through your background", "what are your comp expectations"), so the
+    questions most certain to be asked again were the ones prep never saw. Untagged
+    ground goes to the behavioral set, which is where a screening question belongs.
+    """
+    out=[]
+    for d,q in question_bank_for(company):
+        d=(d or "").lower()
+        if d.startswith(dim[:4]) or (dim=="behavioral" and not d.startswith(("lead","tech","beha","arti"))):
+            out.append(q)
+    return out
 
 def question_bank_for(company):
     k=slug(company); out=[]

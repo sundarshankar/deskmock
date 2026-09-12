@@ -184,6 +184,35 @@ check("an applied role is not re-queued",
 check("prepare_batch refuses an empty selection", mc.do_prepare_batch([])["ok"] is False)
 check("prepare_batch caps a runaway batch", mc.do_prepare_batch([{"company":"C","title":"T"}]*51)["ok"] is False)
 
+print("== debrief questions reach the prep that should carry them ==")
+# A debrief tags each captured question, and prep used to take only an exact-prefix
+# match — so every [Other] question was stranded. A recruiter screen is nearly all
+# [Other] ("walk me through your background", "comp expectations"), which made the
+# questions most certain to be asked again the ones prep never saw.
+_qb = mc.CO / "data" / "question-bank.tsv"
+_had = _qb.exists()
+_prior = _qb.read_text() if _had else ""
+_qb.write_text(_prior +
+  "datawright\tLeadership\thow do you scale a platform team\n"
+  "datawright\tTechnical\twalk me through your rollback strategy\n"
+  "datawright\tBehavioral\ttell me about a failure\n"
+  "datawright\tOther\twhat are your compensation expectations\n")
+try:
+    _lead = mc.real_questions_for("Datawright", "leadership")
+    _tech = mc.real_questions_for("Datawright", "technical")
+    _beh  = mc.real_questions_for("Datawright", "behavioral")
+    check("a leadership question goes to the leadership brief", _lead == ["how do you scale a platform team"], _lead)
+    check("a technical question goes to the technical set", _tech == ["walk me through your rollback strategy"], _tech)
+    check("an [Other] question is no longer stranded", "what are your compensation expectations" in _beh, _beh)
+    check("it lands in exactly one set, not all of them",
+          "what are your compensation expectations" not in _lead + _tech, (_lead, _tech))
+    check("the behavioral set still carries its own", "tell me about a failure" in _beh, _beh)
+    check("another company's bank is not borrowed", mc.real_questions_for("Vertex Cloud", "behavioral") == [],
+          mc.real_questions_for("Vertex Cloud", "behavioral"))
+finally:
+    if _had: _qb.write_text(_prior)
+    else: _qb.unlink()
+
 print("== stage moves: the board can walk a role forward (and back) ==")
 # The board used to be able to say "Applied" and nothing after it, so a company
 # that replied stayed parked in Applied forever. These cover the write path the
