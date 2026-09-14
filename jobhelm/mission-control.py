@@ -11,7 +11,7 @@ existing career-ops scripts + DeskMock under the hood.
 import os, re, glob, json, html, shlex, subprocess, pathlib, datetime, webbrowser, threading
 import urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -373,7 +373,12 @@ def match_score(title, loc):
     elif (not l) or re.search(r'united states|\bus\b', l): s+=0.2
     return round(min(5.0, max(1.0, s)), 1)
 
-def pipeline_recent():
+def pipeline_recent(days=None):
+    # The window used to be JOBHELM_DISCOVER_DAYS only — an env var on a LaunchAgent,
+    # so narrowing to "the last 7 days" meant editing a plist and restarting. It is a
+    # per-look question (a posting that has been up three weeks has a queue in front
+    # of it), so the caller passes it and the UI can ask for a different one.
+    win = DISCOVER_DAYS if days is None else max(1, min(int(days), 365))
     POS = re.compile(r'\b(director|vp|vice president|head|sr\.? director|senior director)\b', re.I)
     DOM = re.compile(r'\b(cloud|platform|infrastructure|infra|sre|reliability|devops|engineering|technolog)', re.I)
     NEG = re.compile(r'\b(sales|account|market|pharma|clinical|medical|nurse|regulatory|manufactur|product manage|program manage|design|ux|human resources|field|scientist|therap|supply chain)\b', re.I)
@@ -396,7 +401,7 @@ def pipeline_recent():
     today = datetime.date.today()
     ds = [d(r["posted"]) for r in rows if d(r["posted"])]
     newest = max(ds) if ds else None
-    rows = [r for r in rows if d(r["posted"]) and (today-d(r["posted"])).days <= DISCOVER_DAYS]
+    rows = [r for r in rows if d(r["posted"]) and (today-d(r["posted"])).days <= win]
     idx = suppressed_index()
     hidden = {}
     fresh = []
@@ -438,15 +443,17 @@ def pipeline_recent():
     for r in uniq:
         r["first_seen"] = first_seen.get(r["key"], "")
         r["is_new"] = bool(ack and r["first_seen"] > ack)
+        pd = d(r["posted"])
+        r["age"] = (today-pd).days if pd else None
     uniq.sort(key=lambda r: (r["is_new"], not r["agency"], r["score"], r["posted"]), reverse=True)
     new_count = sum(1 for r in uniq if r["is_new"])
 
     # P3: report the true survivor count so a truncated list cannot read as
     # "that is everything". DISCOVER_MAX rows travel to the browser; the UI
     # shows DISCOVER_SHOWN of them behind a "show all" toggle.
-    meta = dict(days=DISCOVER_DAYS, shown=min(len(uniq), DISCOVER_SHOWN),
+    meta = dict(days=win, default_days=DISCOVER_DAYS, shown=min(len(uniq), DISCOVER_SHOWN),
                 total=len(uniq), sent=min(len(uniq), DISCOVER_MAX),
-                start=(today-datetime.timedelta(days=DISCOVER_DAYS)).isoformat(),
+                start=(today-datetime.timedelta(days=win)).isoformat(),
                 end=today.isoformat(), newest=(newest.isoformat() if newest else ""),
                 stale_days=((today-newest).days if newest else None),
                 agencies=sum(1 for r in uniq if r.get("agency")),
@@ -554,10 +561,10 @@ def resume_for(company, num):
         if k and k in slug(f) and not any(x in n for x in ("gap","pack","master","toolkit","prep")): return f
     return ""
 
-def build_state():
+def build_state(days=None):
     A=[a for a in apps() if a["status"].upper()!="SKIP"]
     active=[a for a in A if a["status"].upper() not in ("REJECTED","DISCARDED")]
-    pipe,pipe_hidden,pipe_meta=pipeline_recent(); nm=n_mock(); sg=standing_gaps(); cb=contacts_by_co()
+    pipe,pipe_hidden,pipe_meta=pipeline_recent(days); nm=n_mock(); sg=standing_gaps(); cb=contacts_by_co()
     def cnt(*s): return sum(1 for a in A if a["status"].lower() in [x.lower() for x in s])
     STAGES=["evaluated","applied","responded","interview","offer"]
     def nextact(a):
@@ -1834,7 +1841,8 @@ details summary{color:var(--accent2)}
     <div class="panel" style="margin-bottom:16px"><h2 id="nmtitle">🆕 New matches</h2>
       <div id="nmwin" class="sm muted" style="margin:-4px 0 4px"></div>
       <div id="nmhidden" class="sm muted" style="margin:0 0 10px"></div>
-      <table><thead><tr><th></th><th>Fit</th><th>Company</th><th>Role</th><th>Posted</th><th></th></tr></thead><tbody id="nm"></tbody></table>
+      <div id="nmctl" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 10px"></div>
+      <table><thead><tr><th></th><th>Fit</th><th>Company</th><th>Role</th><th>Posted</th><th>Age</th><th></th></tr></thead><tbody id="nm"></tbody></table>
       <div id="nmmore" style="margin-top:10px"></div>
       <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button id="prepbtn" class="sm p" disabled onclick="prepareBatch()">⚙ Prepare selected</button>
@@ -2010,8 +2018,33 @@ async function prepareBatch(){
   },900);
 }
 
+/* Posting age is the whole point of this panel: a role that has been up three weeks
+   already has a queue in front of it, so "show me the last 7 days" is a filter you
+   want on the page, not an env var on a LaunchAgent. The window is a server round
+   trip (rows outside it never travel), the sort is local. */
+var NM_DAYS=null, NM_SORT='fit';
+function nmControls(MT){
+  var el=document.getElementById('nmctl'); if(!el) return;
+  var cur=NM_DAYS||MT.days||14;
+  var win=[3,7,14,30].map(function(d){
+    return '<button class="sm'+(d===cur?' p':'')+'" onclick="setNmDays('+d+')">'+d+'d</button>';
+  }).join(' ');
+  var sort=[['fit','Best fit'],['new','Newest']].map(function(o){
+    return '<button class="sm'+(o[0]===NM_SORT?' p':'')+'" onclick="setNmSort(\\''+o[0]+'\\')">'+o[1]+'</button>';
+  }).join(' ');
+  el.innerHTML='<span class="sm muted">Posted within</span> '+win
+              +' <span class="sm muted" style="margin-left:8px">Sort</span> '+sort;
+}
+function setNmDays(d){ NM_DAYS=d; load(); }
+function setNmSort(k){ NM_SORT=k; renderDiscover(); }
+function nmAgeCell(m){
+  if(m.age==null) return '<td class="sm muted">—</td>';
+  var c=m.age<=7?'var(--accent)':(m.age<=14?'var(--amber)':'var(--muted)');
+  return '<td class="sm" style="color:'+c+';white-space:nowrap">'+m.age+'d</td>';
+}
 function renderDiscover(){
   var MT=DATA.new_meta||{days:14,shown:40,total:(DATA.new_matches||[]).length,sent:(DATA.new_matches||[]).length};
+  if(NM_DAYS==null&&MT.days) NM_DAYS=MT.days;
   (function(){var t=document.getElementById('nmtitle');if(t)t.textContent='🆕 New matches \u00b7 last '+MT.days+' days \u00b7 best fit first';
     var w=document.getElementById('nmwin');if(!w)return;
     var line='Posted '+esc(MT.start||'')+' \u2192 '+esc(MT.end||'')+(MT.total!=null?' \u00b7 '+MT.total+' match'+(MT.total===1?'':'es'):'');
@@ -2020,7 +2053,10 @@ function renderDiscover(){
     if(MT.new_count)line+='<div style="margin-top:6px"><b style="color:var(--accent)">\u2b50 '+MT.new_count+' new to you</b> since you last reviewed'+(MT.since?' ('+esc(MT.since)+')':'')+' \u2014 listed first. <button class="sm" onclick="ackDiscover()">\u2713 Mark all reviewed</button></div>';
     else if(MT.since)line+='<div style="margin-top:6px" class="muted">Nothing new since you last reviewed ('+esc(MT.since)+').</div>';
     w.innerHTML=line;})();
-  var _all=DATA.new_matches||[]; var _lim=(window._nmAll?_all.length:Math.min(MT.shown||40,_all.length));
+  nmControls(MT);
+  var _all=(DATA.new_matches||[]).slice();
+  if(NM_SORT==='new') _all.sort(function(a,b){return String(b.posted||'').localeCompare(String(a.posted||''))||((b.score||0)-(a.score||0))});
+  var _lim=(window._nmAll?_all.length:Math.min(MT.shown||40,_all.length));
   document.getElementById('nm').innerHTML=(_all.length?_all.slice(0,_lim):[{company:'None new 🎉',title:'',posted:'',url:''}]).map(function(m){
     var args="(this,'"+encodeURIComponent(m.url||'')+"','"+encodeURIComponent(m.company||'')+"','"+encodeURIComponent(m.title||'')+"','"+esc(m.posted||'')+"')";
     var sel=(m.company&&m.title)?'<button class="sm p" title="Add to your board (To apply)" onclick="selectMatch'+args+'">➕ Select</button> ':'';
@@ -2030,7 +2066,7 @@ function renderDiscover(){
     var agy=m.agency?' <span class="sm muted" title="Staffing agency or aggregator \u2014 the real employer is not named">via agency</span>':'';
     var nw=m.is_new?' <span class="sm" style="background:var(--accent);color:#0b0d10;border-radius:4px;padding:1px 6px;font-weight:700" title="First appeared in Discover after you last marked the list reviewed">NEW</span>':'';
     var pk=(m.company&&m.title)?'<td><input type="checkbox" title="Select for the Apply queue" onchange="togglePick(\\''+esc(m.key||'')+'\\','+args.slice(6)+'"></td>':'<td></td>';
-    return '<tr'+(m.is_new?' style="background:color-mix(in srgb,var(--accent) 9%, transparent)"':(m.agency?' style="opacity:.68"':''))+'>'+pk+sccell+'<td><b>'+esc(m.company)+'</b>'+nw+agy+'</td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td><td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
+    return '<tr'+(m.is_new?' style="background:color-mix(in srgb,var(--accent) 9%, transparent)"':(m.agency?' style="opacity:.68"':''))+'>'+pk+sccell+'<td><b>'+esc(m.company)+'</b>'+nw+agy+'</td><td class="sm">'+esc(m.title)+'</td><td class="sm muted">'+esc(m.posted)+'</td>'+nmAgeCell(m)+'<td style="white-space:nowrap">'+(m.url?'<a href="'+esc(m.url)+'" target="_blank">open ↗</a> ':'')+sel+ig+'</td></tr>'}).join('');
   (function(){var el=document.getElementById('nmmore');if(!el)return;
     if(_all.length>_lim){el.innerHTML='<button class="sm" onclick="window._nmAll=true;renderDiscover()">Show all '+MT.total+' \u2193</button> <span class="sm muted">showing '+_lim+' of '+MT.total+(MT.total>MT.sent?' ('+MT.sent+' loaded \u2014 raise JOBHELM_DISCOVER_MAX for more)':'')+'</span>';}
     else if(window._nmAll&&_all.length>(MT.shown||40)){el.innerHTML='<button class="sm" onclick="window._nmAll=false;renderDiscover()">Show fewer \u2191</button> <span class="sm muted">showing all '+_all.length+'</span>';}
@@ -2048,7 +2084,7 @@ function renderDiscover(){
   var ic=document.getElementById('igncount'); if(ic) ic.textContent=ign.length;
 }
 async function load(){
-  try{DATA=await (await fetch('/api/data')).json();}catch(e){toast('Load failed — is the server running?');return}
+  try{DATA=await (await fetch('/api/data'+(NM_DAYS?('?days='+NM_DAYS):''))).json();}catch(e){toast('Load failed — is the server running?');return}
   var sc=DATA.scan||{last:{},top:[],boards:0}; var when=(sc.last&&sc.last.when)?sc.last.when:'—';
   document.getElementById('ts').textContent='live · '+DATA.ts+' · 🛰 scan '+when+' · '+location.host;
   if(DATA.setup && !DATA.setup.ready && !window._setupPrompted){window._setupPrompted=true;
@@ -2471,7 +2507,11 @@ class H(BaseHTTPRequestHandler):
         p=urlparse(self.path).path
         if p=="/": self._send(200,PAGE,"text/html")
         elif p=="/flashcards": self._send(200,FLASHCARDS_PAGE,"text/html")
-        elif p=="/api/data": self._send(200,json.dumps(build_state()))
+        elif p=="/api/data":
+            q=parse_qs(urlparse(self.path).query or "")
+            try: days=int((q.get("days") or [""])[0])
+            except ValueError: days=None
+            self._send(200,json.dumps(build_state(days)))
         elif p=="/api/flashcards_data": self._send(200,json.dumps(flashcards_data()))
         else: self._send(404,"{}")
     def do_POST(self):

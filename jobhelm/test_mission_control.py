@@ -213,6 +213,37 @@ finally:
     if _had: _qb.write_text(_prior)
     else: _qb.unlink()
 
+print("== Discover: the posting-age window is a filter, not a restart ==")
+# A posting that has been up three weeks already has a queue in front of it, so the
+# window is a per-look question. It used to be JOBHELM_DISCOVER_DAYS only — an env var
+# on a LaunchAgent, changeable only by editing a plist and restarting.
+_wide = mc.pipeline_recent(3650)[0]
+_ages = sorted(r["age"] for r in _wide if r.get("age") is not None)
+check("every match carries its own age in days", len(_ages) == len(_wide) and all(a >= 0 for a in _ages), _ages[:5])
+if _ages:
+    _cut = _ages[len(_ages)//2] or 1
+    _rows, _hidden, _meta = mc.pipeline_recent(_cut)
+    check("a narrower window drops everything older than it",
+          all(r["age"] <= _cut for r in _rows), [r["age"] for r in _rows])
+    check("the window the caller asked for is what the panel reports",
+          _meta["days"] == _cut, _meta["days"])
+    check("the window is wider or equal when asked for more",
+          len(mc.pipeline_recent(3650)[0]) >= len(_rows))
+check("an absent window falls back to the configured default",
+      mc.pipeline_recent()[1] is not None and mc.pipeline_recent()[2]["days"] == mc.DISCOVER_DAYS,
+      mc.pipeline_recent()[2]["days"])
+check("the default is still reported alongside the active window",
+      mc.pipeline_recent(7)[2]["default_days"] == mc.DISCOVER_DAYS)
+# a hostile or fat-fingered value must not become an unbounded scan
+check("a nonsense window is clamped, not honoured",
+      mc.pipeline_recent(0)[2]["days"] == 1 and mc.pipeline_recent(99999)[2]["days"] == 365,
+      (mc.pipeline_recent(0)[2]["days"], mc.pipeline_recent(99999)[2]["days"]))
+check("build_state threads the window through to the panel",
+      mc.build_state(7)["new_meta"]["days"] == 7, mc.build_state(7)["new_meta"]["days"])
+check("the Discover controls are on the page",
+      'id="nmctl"' in mc.PAGE and "setNmDays(" in mc.PAGE and "setNmSort(" in mc.PAGE)
+check("the age column is rendered", "nmAgeCell" in mc.PAGE and "<th>Age</th>" in mc.PAGE)
+
 print("== stage moves: the board can walk a role forward (and back) ==")
 # The board used to be able to say "Applied" and nothing after it, so a company
 # that replied stayed parked in Applied forever. These cover the write path the
