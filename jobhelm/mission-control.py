@@ -562,6 +562,44 @@ def resume_for(company, num):
         if k and k in slug(f) and not any(x in n for x in ("gap","pack","master","toolkit","prep")): return f
     return ""
 
+def funnel_stats():
+    """The numbers that say whether the search is working, not how busy it is.
+
+    A board counts activity: 20 Applied looks like progress. The question it cannot
+    answer is whether any of it lands — and the answer here was 1 positive reply from
+    23 applications, with every single company that replied being one where there was a
+    contact on file. That correlation is the whole strategy, and it was invisible.
+    """
+    A=[a for a in apps() if a["status"].upper()!="SKIP"]
+    st=lambda a: a["status"].lower()
+    reached=[a for a in A if st(a) in ("applied","responded","interview","offer","hired","rejected")]
+    positive=[a for a in A if st(a) in ("responded","interview","offer","hired")]
+    rejected=[a for a in A if st(a)=="rejected"]
+    silent=[a for a in reached if st(a)=="applied"]
+    warm=contacts_by_co()
+    has_contact=lambda a: bool(warm.get(slug(a["company"])))
+    with_c=[a for a in reached if has_contact(a)]
+    pos_with=[a for a in positive if has_contact(a)]
+    def pct(n,d): return round(100.0*n/d) if d else 0
+    # days an application has been silent — the number that says "stop waiting"
+    today=datetime.date.today()
+    ages=[]
+    for a in silent:
+        m=re.search(r"Applied (\d{4}-\d{2}-\d{2})", a.get("notes","") or "")
+        d=m.group(1) if m else a.get("date","")
+        try: ages.append((today-datetime.date.fromisoformat(d)).days)
+        except Exception: pass
+    ages.sort()
+    return dict(
+        reached=len(reached), positive=len(positive), rejected=len(rejected), silent=len(silent),
+        any_rate=pct(len(positive)+len(rejected), len(reached)), pos_rate=pct(len(positive), len(reached)),
+        with_contact=len(with_c), without_contact=len(reached)-len(with_c),
+        pos_rate_with=pct(len(pos_with), len(with_c)),
+        pos_rate_without=pct(len(positive)-len(pos_with), len(reached)-len(with_c)),
+        median_silence=(ages[len(ages)//2] if ages else 0), oldest_silence=(ages[-1] if ages else 0),
+        unevaluated=sum(1 for a in A if (a.get("score") or "N/A") in ("N/A","","-")),
+        total=len(A))
+
 def build_state(days=None):
     A=[a for a in apps() if a["status"].upper()!="SKIP"]
     active=[a for a in A if a["status"].upper() not in ("REJECTED","DISCARDED")]
@@ -609,6 +647,7 @@ def build_state(days=None):
         pipeline=pipeline, new_matches=pipe, next_actions=na, standing_gaps=sg,
         profile=profile(), scan=scan_coverage(), setup=setup_status(), readiness=readiness_summary(),
         new_hidden=pipe_hidden, new_meta=pipe_meta, apply_queue=apply_queue(),
+        inbox=inbox_proposals(), funnel=funnel_stats(),
         ignored=list(reversed(_ignored_rows()))[:40],
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -699,6 +738,63 @@ def do_reject(num):
 # set-status.mjs validates against it and refuses anything else.
 STAGE_LABELS = {"evaluated":"Evaluated","applied":"Applied","responded":"Responded",
                 "interview":"Interview","offer":"Offer","hired":"Hired"}
+
+INBOX_PROPOSALS = CO/"data/inbox-proposals.json"
+
+def inbox_proposals():
+    try:
+        d=json.loads(read(INBOX_PROPOSALS) or "{}")
+        return d.get("proposals") or []
+    except Exception:
+        return []
+
+def _write_proposals(rows):
+    try:
+        d=json.loads(read(INBOX_PROPOSALS) or "{}")
+    except Exception:
+        d={}
+    d["proposals"]=rows
+    INBOX_PROPOSALS.write_text(json.dumps(d, indent=1))
+
+def _capture_contact(company, contact, why):
+    """A recruiter who wrote to you is a contact you did not have.
+
+    The whole reason inbox sync beats a status field: 13 of the live applications have
+    nobody on file, and every company that has ever replied is one where there WAS
+    somebody. Mail turns a silent row into a named human, for free.
+    """
+    if not contact or not (contact.get("email") or "").strip(): return ""
+    f=CO/"data/contacts.tsv"
+    body=read(f)
+    if contact["email"].lower() in body.lower(): return ""          # already known
+    row="\t".join([contact.get("name") or contact["email"].split("@")[0], company, "recruiter",
+                    "emailed you", "-", contact["email"], "-", "1",
+                    f"captured from inbox sync ({why})"])
+    with f.open("a") as fh: fh.write(row+"\n")
+    return contact.get("name") or contact["email"]
+
+def do_inbox_apply(pid):
+    """Approve ONE proposal. Never a batch: a misread rejection deletes a live thread."""
+    rows=inbox_proposals()
+    p=next((x for x in rows if x.get("id")==pid), None)
+    if not p: return dict(ok=False, msg="That proposal is no longer in the queue.")
+    msg=""
+    if p.get("stage"):
+        r=do_stage(p["num"], p["stage"])
+        if not r.get("ok"): return r
+        msg=r["msg"]
+    else:
+        msg="Noted (an automated receipt — no stage change)"
+    who=_capture_contact(p.get("company",""), p.get("contact"), p.get("from","")[:40])
+    if who: msg+=f" · added {who} to your contacts"
+    _write_proposals([x for x in rows if x.get("id")!=pid])
+    return dict(ok=True, msg=msg)
+
+def do_inbox_dismiss(pid):
+    rows=inbox_proposals()
+    if not any(x.get("id")==pid for x in rows): return dict(ok=False, msg="Already gone.")
+    _write_proposals([x for x in rows if x.get("id")!=pid])
+    return dict(ok=True, msg="Dismissed — the tracker was not touched.")
 
 def do_stage(num, state):
     label = STAGE_LABELS.get((state or "").strip().lower())
@@ -1538,6 +1634,52 @@ def do_drill(dim=""):
     name=_render_open(out, f"drill-{slug(dim)}")
     return dict(ok=True, msg=f"🎯 {dim} drill generated + opened ({name}) — your weakest area. Rehearse, then re-mock to raise the score.")
 
+def do_warmpath(num):
+    """A research brief for a role with nobody on file.
+
+    Every application that has ever drawn a reply is one where there was a contact;
+    13 of the live ones have none. This does not scrape LinkedIn and does not invent
+    people — inventing a name is worse than having none, because you would send a note
+    to someone who does not exist in that job. It names the ROLES worth finding, the
+    searches that find them, the overlap from the candidate's own history that makes an
+    approach land, and a short note per archetype to adapt once a real name is found.
+    """
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False, msg="Role not found.")
+    key=load_key()
+    if not key: return dict(ok=False, msg="No OpenRouter key.")
+    company, role = a["company"], a["role"]
+    cv=read(CO/"cv.md")[:3000]; jd,jdsrc=_jd_text_for(a)
+    known=contacts_by_co().get(slug(company)) or []
+    sysp=("Write a warm-path brief: how this candidate reaches a HUMAN at this company for this specific "
+          "role. Markdown, plain-ASCII, first person where it is the candidate's voice.\n"
+          "## Who to find\n4-5 entries. Each is a ROLE at this company (e.g. 'VP Infrastructure Engineering "
+          "— likely the hiring manager', 'Technical recruiter for the platform org'), why that person matters "
+          "for THIS posting, and how close they are to the decision. NEVER invent a person's name: you do not "
+          "know who holds these jobs. Name TITLES, not people.\n"
+          "## How to find them\nExact LinkedIn search strings and filters to run for each, plus where else "
+          "they are visible (conference talks, engineering blog, GitHub, podcasts).\n"
+          "## What makes an approach land\nThe real overlaps between the candidate's CV and this company "
+          "or role — shared employers, shared stack at scale, a problem they are visibly hiring to solve that "
+          "the CV shows being solved. Use ONLY facts from the CV. If an overlap is weak, say so.\n"
+          "## Notes to send\nOne short note per archetype (hiring manager, recruiter, peer//alumni), under 90 "
+          "words each, specific to this posting, no flattery, no 'passionate', with a [NAME] placeholder and "
+          "one concrete CV fact. End each with a small, easy ask.\n"
+          "## If nobody answers\nThe fallback order, and when to stop.\n"
+          + _ATTR_RULE)
+    usr=(f"ROLE: {role} at {company}.\n\n"
+         + (f"JOB DESCRIPTION:\n{jd}\n\n" if jd else "No JD captured — work from the title and level.\n\n")
+         + (f"ALREADY ON FILE at this company: {'; '.join(known)}\n\n" if known else "NOBODY on file at this company yet.\n\n")
+         + f"CANDIDATE CV (only source of truth):\n{cv}\n\nWrite the warm-path brief.")
+    try: md=_llm([{"role":"system","content":sysp},{"role":"user","content":usr}],key,2600)
+    except Exception as e: return dict(ok=False, msg=f"Failed: {e}")
+    out=CO/"interview-prep"/f"{slug(company)}-warmpath.md"
+    out.write_text(f"# Warm path — {role} @ {company}\n"
+                   f"_(Research brief. Titles, not names — verify every person on LinkedIn before writing to them. "
+                   f"{'Tailored to '+jdsrc if jd else 'role-level'}.)_\n\n{md}\n")
+    _open_file(out)
+    return dict(ok=True, msg=f"🤝 Warm-path brief for {company} — opened. Titles to find, searches to run, and notes to adapt. Verify each person before sending.")
+
 def do_negotiation(num):
     a=next((x for x in apps() if x["num"]==str(num)),None)
     if not a: return dict(ok=False,msg="Role not found.")
@@ -1916,10 +2058,12 @@ details summary{color:var(--accent2)}
     <div class="chips" id="stagechips"></div>
     <span class="sm muted" style="margin-left:auto">Drag a card to another column to change its stage</span>
   </div>
+  <div id="inboxpanel" class="panel" style="display:none;margin-bottom:14px"></div>
   <div class="main">
     <div class="board" id="board"></div>
     <div class="rail">
       <div class="panel"><h2>🎯 Interview readiness</h2><div id="readiness"></div></div>
+      <div class="panel"><h2>📈 Is this working?</h2><div id="funnel"></div></div>
       <div class="panel"><h2>🔥 Next best actions</h2><ul class="na" id="na"></ul></div>
       <div class="panel"><h2>📌 Standing gaps · study focus</h2><ul class="glist" id="gaps"></ul></div>
     </div>
@@ -2202,6 +2346,8 @@ async function load(){
     STAGES.map(function(st){var n=DATA.pipeline.filter(function(p){return stageOf(p.status)===st[0]}).length;
       return '<span class="fchip'+(FILTER===st[0]?' on':'')+'" onclick="setFilter(\\''+st[0]+'\\')">'+st[1]+' '+n+'</span>'}).join('');
   renderBoard();
+  renderInbox();
+  renderFunnel();
   // rail: next actions
   document.getElementById('na').innerHTML=DATA.next_actions.map(function(a){
     var b=a.kind==='mock'?'<button class="sm b" onclick="act(\\'mock\\',{})">Rehearse</button>'
@@ -2332,6 +2478,66 @@ function dropCard(e,stage){
   if(stage==='applied'&&cur==='evaluated') act('apply',{num:num});
   else act('stage',{num:num,state:stage});
 }
+/* Inbox review queue. Twenty applications read as "silent", and most silence is a
+   reply that never reached the board — you go on chasing a company that already said
+   no. These are PROPOSALS: each carries the sentence it judged on and how sure it is,
+   and nothing touches the tracker until you press the button. One at a time, because
+   a misread rejection deletes a live thread. */
+function renderInbox(){
+  var el=document.getElementById('inboxpanel'); if(!el) return;
+  var rows=DATA.inbox||[];
+  if(!rows.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='';
+  var KIND={offer:['🎉','var(--accent)'],interview:['🗓','var(--accent)'],rejected:['✗','var(--red)'],
+            responded:['📬','var(--amber)'],ack:['📨','var(--muted)']};
+  el.innerHTML='<h2 style="margin:0 0 2px">📥 From your inbox <span class="sm muted" style="font-weight:400">'
+      +rows.length+' to review</span></h2>'
+    +'<div class="sm muted" style="margin-bottom:10px">Each one quotes the line it judged on. Nothing is written until you apply it.</div>'
+    +rows.map(function(p){
+      var k=KIND[p.kind]||['•','var(--muted)'];
+      var to=p.stage?('<b style="color:'+k[1]+'">'+p.stage+'</b>'):'<span class="muted">no change — automated receipt</span>';
+      var conf=Math.round((p.confidence||0)*100);
+      var cc=conf>=90?'var(--accent)':(conf>=75?'var(--amber)':'var(--red)');
+      return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+        +'<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">'
+          +'<span style="font-size:15px">'+k[0]+'</span>'
+          +'<b>'+esc(p.company)+'</b><span class="sm muted">'+esc(p.role||'')+'</span>'
+          +'<span class="sm" style="margin-left:auto;color:'+cc+'" title="'+esc(p.why||'')+'">'+conf+'% sure</span>'
+        +'</div>'
+        +'<div class="sm" style="margin:4px 0">'+esc(p.current||'')+' → '+to+'</div>'
+        +'<div class="sm muted">'+esc(p.date||'')+' · '+esc(p.from||'')+' · '+esc(p.subject||'')+'</div>'
+        +(p.quote?'<div class="sm" style="margin-top:6px;padding-left:9px;border-left:2px solid var(--line);color:var(--muted)">“'+esc(p.quote)+'”</div>':'')
+        +(p.contact?'<div class="sm" style="margin-top:5px">🤝 will save contact <b>'+esc(p.contact.name||'')+'</b> ('+esc(p.contact.email||'')+')</div>':'')
+        +'<div class="actions" style="margin-top:8px">'
+          +'<button class="sm p" onclick="act(\\'inbox_apply\\',{id:\\''+esc(p.id)+'\\'})">✓ Apply</button>'
+          +'<button class="sm" onclick="act(\\'inbox_dismiss\\',{id:\\''+esc(p.id)+'\\'})">Dismiss</button>'
+          +'<button class="sm" onclick="openDrawer(\\''+esc(p.num)+'\\')">Open role</button>'
+        +'</div></div>';
+    }).join('');
+}
+/* A board counts activity; 20 Applied looks like progress. This answers the question
+   a board cannot: does any of it land? The one line that matters is the contact split —
+   every company that has ever replied was one with somebody on file. */
+function renderFunnel(){
+  var f=DATA.funnel, el=document.getElementById('funnel'); if(!el||!f) return;
+  if(!f.reached){ el.innerHTML='<div class="sm muted">No applications out yet.</div>'; return; }
+  var rc=f.pos_rate>=15?'var(--accent)':(f.pos_rate>=7?'var(--amber)':'var(--red)');
+  var bar=function(pct,col){return '<span style="display:inline-block;height:6px;width:'+Math.max(2,Math.min(100,pct))+'%;background:'+col+';border-radius:3px;vertical-align:middle"></span>';};
+  var h='<div style="font-size:26px;font-weight:700;line-height:1;color:'+rc+'">'+f.pos_rate+'%</div>'
+      +'<div class="sm muted" style="margin-bottom:9px">of '+f.reached+' applications got a real reply · '
+      +f.rejected+' rejected · <b>'+f.silent+' still silent</b></div>';
+  if(f.with_contact && f.without_contact){
+    h+='<div class="sm" style="margin:8px 0 3px"><b>With a contact on file</b> '+bar(f.pos_rate_with,'var(--accent)')
+      +' <b style="color:var(--accent)">'+f.pos_rate_with+'%</b> <span class="muted">('+f.with_contact+' roles)</span></div>'
+      +'<div class="sm" style="margin-bottom:8px"><b>Without</b> '+bar(f.pos_rate_without||1,'var(--red)')
+      +' <b style="color:var(--red)">'+f.pos_rate_without+'%</b> <span class="muted">('+f.without_contact+' roles)</span></div>';
+    if(f.pos_rate_without===0&&f.pos_rate_with>0)
+      h+='<div class="sm" style="color:var(--amber)">Every reply you have ever had came from a company where you knew someone.</div>';
+  }
+  h+='<div class="sm muted" style="margin-top:9px">Silent applications: '+f.median_silence+'d median, oldest '+f.oldest_silence+'d.</div>';
+  if(f.unevaluated) h+='<div class="sm muted">'+f.unevaluated+' of '+f.total+' tracked roles were never scored.</div>';
+  el.innerHTML=h;
+}
 function renderBoard(){
   var q=(document.getElementById('q').value||'').toLowerCase();
   var cols=STAGES.filter(function(st){return FILTER===null||FILTER===st[0]});
@@ -2379,7 +2585,8 @@ function renderDrawer(p){
       '</div></div>'+
     '<div class="sec"><div class="h">▶ Next action</div><b>'+esc(p.nextact)+'</b></div>'+
     '<div class="sec"><div class="h">⚠️ Gaps to close</div><ul class="glist">'+gaps+'</ul></div>'+
-    '<div class="sec"><div class="h">🤝 Warm path</div>'+(p.contact?esc(p.contact):'<span class="muted">none yet — find a contact</span>')+'</div>'+
+    '<div class="sec"><div class="h">🤝 Warm path</div>'+(p.contact?esc(p.contact):'<span class="muted">nobody on file — and every application that has ever drawn a reply had somebody</span>')+
+      '<div class="actions" style="margin-top:7px"><button class="sm'+(p.contact?'':' p')+'" onclick="if(confirm(\\'Build a warm-path brief for '+esc(p.company)+'? Titles to find, searches to run, notes to adapt. ~40s\\'))act(\\'warmpath\\',{num:\\''+p.num+'\\'})">🤝 Find a way in</button></div></div>'+
     '<div class="sec"><div class="h">🏢 Company brief</div><button class="sm" onclick="brief(\\''+p.num+'\\')">Generate brief</button><div id="briefbox" style="display:none" class="briefbox"></div></div>'+
     '<div class="sec"><div class="h">🚀 Assisted apply <span style="text-transform:none;font-weight:400;color:var(--muted)">(fills fields; you attach résumé + submit)</span></div>'+
       (p.hasresume?'<button class="sm p" onclick="act(\\'open_resume\\',{num:\\''+p.num+'\\'})">📄 Open tailored résumé</button> ':'<span class="sm muted">no tailored résumé PDF in output/ yet. </span>')+
@@ -2659,6 +2866,8 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
         elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
         elif p=="/api/stage": self._send(200,json.dumps(do_stage(args.get("num"),args.get("state"))))
+        elif p=="/api/inbox_apply": self._send(200,json.dumps(do_inbox_apply(args.get("id",""))))
+        elif p=="/api/inbox_dismiss": self._send(200,json.dumps(do_inbox_dismiss(args.get("id",""))))
         elif p=="/api/log_followup": self._send(200,json.dumps(do_log_followup(args.get("num"),args.get("channel",""),args.get("contact",""),args.get("notes",""))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
         elif p=="/api/draft": self._send(200,json.dumps(do_draft(args.get("message",""))))
@@ -2671,6 +2880,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/preppack_selected": self._send(200,json.dumps(do_preppack_selected()))
         elif p=="/api/story_bank": self._send(200,json.dumps(do_story_bank()))
         elif p=="/api/open_story_bank": self._send(200,json.dumps(do_open_story_bank()))
+        elif p=="/api/warmpath": self._send(200,json.dumps(do_warmpath(args.get("num"))))
         elif p=="/api/negotiation": self._send(200,json.dumps(do_negotiation(args.get("num"))))
         elif p=="/api/debrief": self._send(200,json.dumps(do_debrief(args.get("num"),args.get("notes",""))))
         elif p=="/api/flashcards": self._send(200,json.dumps(do_flashcards()))
