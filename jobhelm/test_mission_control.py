@@ -59,7 +59,28 @@ check("reopening the window brings them back", len(mc.build_state()["new_matches
 
 print("== follow-ups resolve company names ==")
 fu = mc.followups_due()
-check("no raw '- next' leaks", all(not c.startswith("- next") for _, c in fu))
+check("no raw '- next' leaks", all(not f["company"].startswith("- next") for f in fu))
+check("each entry carries what the decision needs",
+      all(set(("date", "company", "num", "urgency")) <= set(f) for f in fu), fu[:1])
+# The pin file is append-only and the LAST pin for a role wins — that is what re-pinning a
+# date MEANS. Reading the first one showed month-old superseded reminders while genuinely
+# overdue applications stayed invisible, so pin precedence is worth its own test.
+_fups = mc.CO / "data" / "follow-ups.md"
+_prior = _fups.read_text() if _fups.exists() else ""
+_num = next((a["num"] for a in mc.apps() if a["status"].lower() == "applied"), None)
+if _num:
+    _fups.write_text(_prior + f"\n- next #{_num} 2020-01-01 (set 2020-01-01)\n"
+                              f"- next #{_num} 2020-06-01 (set 2020-05-01)\n")
+    try:
+        _local = mc._followups_due_local(20)
+        _hit = next((f for f in _local if f["num"] == str(_num)), None)
+        check("the latest pin wins, not the earliest",
+              _hit is not None and _hit["date"] == "2020-06-01", _hit)
+    finally:
+        _fups.write_text(_prior)
+check("a future-dated pin is not called due",
+      all(f["date"] <= datetime.date.today().isoformat() for f in mc._followups_due_local(20)),
+      [f["date"] for f in mc._followups_due_local(20)])
 
 print("== do_mock guard + command construction (Terminal stubbed) ==")
 cap = {}

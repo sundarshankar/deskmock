@@ -587,8 +587,11 @@ def build_state(days=None):
               for a in sorted(active,key=lambda x:(-(readiness(x["company"])), x["company"].lower()))]
     # next best actions
     na=[]
-    for d,co in followups_due():
-        na.append(dict(kind="followup",label=f"Follow-up due {d} — {co}"))
+    for f in followups_due():
+        # the age is the part that decides whether to chase or let it go
+        age=f" · {f['days']}d since applying" if f.get("days") is not None else ""
+        sent=f" · {f['sent']} sent" if f.get("sent") else " · none sent"
+        na.append(dict(kind="followup",label=f"Follow up {f['company']} — due {f['date']}{age}{sent}", co=f["company"]))
     unprepped=[a for a in active if a["status"].lower() in ("applied","interview","responded") and not pack(a["company"])]
     for a in unprepped[:3]:
         na.append(dict(kind="prep",label=f"Build prep pack — {a['company']} ({a['role']})",co=a["company"]))
@@ -1695,29 +1698,65 @@ def do_brief(company):
     except Exception as e:
         return dict(ok=False, msg=f"Brief failed: {e}")
 
-def followups_due():
-    # follow-ups.md rows look like:  - next #<appNum> <due-date> (set <date>)
+def followups_due(limit=6):
+    """What actually needs chasing — from career-ops' own cadence engine.
+
+    This used to parse data/follow-ups.md here and got the rules backwards. The pin
+    format is append-only and the LAST pin for a role wins — that is what re-pinning a
+    date means — but this took the FIRST, so a role re-pinned into September still
+    showed its August date. It also never noticed a follow-up that had already been
+    SENT, and never derived a due date for the applications carrying no pin at all,
+    which is most of them. The visible result was five month-old superseded reminders
+    on screen while nineteen genuinely overdue applications stayed invisible: Northern
+    Trust at 38 days, Coca-Cola at 37, Everbridge at 33, none of them listed.
+
+    followup-cadence.mjs already implements the pin precedence, the sent-after-pin
+    rule, and the default cadence; it is the writer's own source of truth and runs in
+    about 75ms, so call it rather than keeping a second half-right copy of its rules.
+    Note it needs the FULL stdout — run() truncates to the last 1500 chars, which would
+    hand back a fragment of JSON.
+    """
+    try:
+        r=subprocess.run(["node","followup-cadence.mjs"],cwd=CO,capture_output=True,text=True,timeout=60)
+        if r.returncode==0 and (r.stdout or "").strip():
+            j=json.loads(r.stdout)
+            rows=[dict(date=e.get("nextFollowupDate") or "", company=e.get("company") or "",
+                       num=str(e.get("num") or ""), urgency=e.get("urgency") or "",
+                       days=e.get("daysSinceApplication"), sent=e.get("followupCount") or 0)
+                  for e in (j.get("entries") or [])
+                  if e.get("urgency") in ("overdue","urgent","due")]
+            rows.sort(key=lambda x: (x["date"] or "9999", -(x["days"] or 0)))
+            return rows[:limit]
+    except Exception:
+        pass
+    return _followups_due_local(limit)
+
+def _followups_due_local(limit=6):
+    """Fallback for when the engine cannot run: last pin wins, closed roles excluded.
+
+    Deliberately simpler than the engine — it cannot derive a cadence for an unpinned
+    row — but it at least honours the precedence rule the engine documents.
+    """
     A={a["num"]: a for a in apps()}
     DEAD={"rejected","skip","discarded","hired","offer"}
     today=datetime.date.today()
-    seen=set(); out=[]
+    latest={}
     for ln in read(CO/"data/follow-ups.md").splitlines():
         if not ln.strip().startswith("-"): continue
-        md=re.search(r"(20\d\d-\d\d-\d\d)", ln)
-        if not md: continue
+        md=re.search(r"(20\d\d-\d\d-\d\d)", ln); mn=re.search(r"#(\d+)", ln)
+        if not (md and mn): continue
         try: d=datetime.date.fromisoformat(md.group(1))
         except Exception: continue
-        if d>today: continue  # not due yet — skip future reminders
-        mn=re.search(r"#(\d+)", ln)
-        key=mn.group(1) if mn else ln.strip()
-        if key in seen: continue  # one reminder per role (earliest due wins)
-        a=A.get(mn.group(1)) if mn else None
-        if a and a["status"].lower() in DEAD: continue  # closed roles don't need chasing
-        seen.add(key)
-        co=(a["company"] if a else "") or ("role #"+mn.group(1) if mn else ln.strip()[:40])
-        out.append((d.isoformat(), co))
-    out.sort()
-    return out[:5]
+        latest[mn.group(1)]=d                      # later line wins, matching the engine
+    out=[]
+    for num,d in latest.items():
+        if d>today: continue
+        a=A.get(num)
+        if a and a["status"].lower() in DEAD: continue
+        out.append(dict(date=d.isoformat(), company=(a["company"] if a else f"role #{num}"),
+                        num=num, urgency="overdue", days=(today-d).days, sent=0))
+    out.sort(key=lambda x: x["date"])
+    return out[:limit]
 
 # ---------- http ----------
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
