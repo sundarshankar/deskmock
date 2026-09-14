@@ -1069,7 +1069,22 @@ def _llm(msgs, key, max_tokens=900, model=None, json_mode=False, web=False):
     req=urllib.request.Request(base+"/chat/completions",data=body,
         headers={"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"JobHelm"})
     with urllib.request.urlopen(req,timeout=120 if web else 90) as r:
-        return json.load(r)["choices"][0]["message"]["content"].strip()
+        ch=(json.load(r).get("choices") or [{}])[0]; m=ch.get("message",{}) or {}
+        content=(m.get("content") or "").strip()
+        reasoning=(m.get("reasoning") or "").strip()
+        fin=ch.get("finish_reason")
+        if content: return content
+        # A reasoning model bills its THINKING against max_tokens before it writes a character
+        # of the answer, so too small a budget comes back as finish_reason=length with content
+        # empty and the reasoning stream in its place. Returning that prose as the answer turns
+        # a token-budget problem into a baffling parse error three functions downstream; and
+        # .strip() on a null content is an AttributeError with nothing to act on.
+        if fin=="length":
+            raise RuntimeError(f"the model ran out of tokens before it answered (max_tokens={max_tokens}; "
+                               f"it spent the budget on {len(reasoning)} chars of reasoning) — raise max_tokens "
+                               f"for this call, or use a non-reasoning model")
+        if reasoning: return reasoning          # some models genuinely put the answer in `reasoning`
+        raise RuntimeError(f"empty model reply (finish: {fin})")
 
 # rehearsal-safety: every metric you'd say out loud must trace to your CV
 _ATTR_RULE=("When you cite a metric, use the CV's EXACT figure for that specific employer — never round, "

@@ -213,6 +213,45 @@ finally:
     if _had: _qb.write_text(_prior)
     else: _qb.unlink()
 
+print("== a truncated reasoning model reports a budget problem, not gibberish ==")
+# A reasoning model spends max_tokens on thinking BEFORE it writes the answer. Too small a
+# budget returns finish_reason=length with content empty and the reasoning stream in its
+# place; handing that prose back as the answer produced "Expecting ',' delimiter" three
+# functions away, which is how a token-budget bug spent a week looking like a JSON bug.
+import io as _io, json as _json
+class _FakeResp:
+    def __init__(self, payload): self._p = _json.dumps(payload).encode()
+    def read(self, *a): return self._p
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+def _reply(payload):
+    _real = mc.urllib.request.urlopen
+    mc.urllib.request.urlopen = lambda *a, **k: _FakeResp(payload)
+    try: return mc._llm([{"role": "user", "content": "x"}], "k", 1600), None
+    except Exception as e: return None, e
+    finally: mc.urllib.request.urlopen = _real
+
+_out, _err = _reply({"choices": [{"finish_reason": "length",
+                                  "message": {"content": None, "reasoning": "I am thinking about " * 40}}]})
+check("a length-truncated reply raises instead of returning the reasoning",
+      _out is None and _err is not None, f"out={str(_out)[:60]}")
+check("the error names the budget, so the fix is obvious",
+      _err is not None and "max_tokens=1600" in str(_err), str(_err)[:120])
+check("the error does not masquerade as the answer",
+      _err is not None and "I am thinking about" not in str(_err)[:60], str(_err)[:80])
+
+_out, _err = _reply({"choices": [{"finish_reason": "stop",
+                                  "message": {"content": None, "reasoning": "the actual answer"}}]})
+check("a model that genuinely answers in `reasoning` still works",
+      _out == "the actual answer", f"{_out!r} {_err}")
+
+_out, _err = _reply({"choices": [{"finish_reason": "stop", "message": {"content": "  hi  "}}]})
+check("an ordinary reply is returned stripped", _out == "hi", f"{_out!r} {_err}")
+
+_out, _err = _reply({"choices": [{"finish_reason": "stop", "message": {"content": None}}]})
+check("a null content with nothing behind it is an error, not an AttributeError",
+      _out is None and isinstance(_err, RuntimeError), f"{_out!r} {type(_err).__name__}")
+
 print("== Discover: the posting-age window is a filter, not a restart ==")
 # A posting that has been up three weeks already has a queue in front of it, so the
 # window is a per-look question. It used to be JOBHELM_DISCOVER_DAYS only — an env var
