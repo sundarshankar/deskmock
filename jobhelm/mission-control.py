@@ -33,6 +33,7 @@ CO   = pathlib.Path(os.environ.get("JOBHELM_CAREEROPS", str(HERE / "sample-data"
 MOCK = pathlib.Path(os.environ.get("JOBHELM_MOCK", str(HERE / "sample-data" / "mock")))
 PORT = int(os.environ.get("JOBHELM_PORT", "8899"))
 DISCOVER_DAYS  = int(os.environ.get("JOBHELM_DISCOVER_DAYS", "14"))   # posting age window, from today
+FOLLOWUP_GAP_DAYS = int(os.environ.get("JOBHELM_FOLLOWUP_GAP_DAYS", "10"))  # days until the next nudge after one is sent
 DISCOVER_SHOWN = int(os.environ.get("JOBHELM_DISCOVER_SHOWN", "40"))  # rows rendered before "show all"
 DISCOVER_MAX   = int(os.environ.get("JOBHELM_DISCOVER_MAX", "200"))   # rows sent to the browser
 HOST = os.environ.get("JOBHELM_HOST", "127.0.0.1")   # Docker sets 0.0.0.0
@@ -1731,6 +1732,38 @@ def followups_due(limit=6):
         pass
     return _followups_due_local(limit)
 
+def do_log_followup(num, channel="", contact="", notes=""):
+    """Record that a follow-up was actually SENT, and pin the next one.
+
+    Without this the loop never closes. The cadence engine supersedes a pin when a
+    follow-up row is logged after it — but nothing could write that row, so
+    followupCount stayed 0 for every application forever and the panel kept naming
+    Northern Trust at 38 days no matter how many notes went out. A reminder you cannot
+    dismiss by doing the thing stops being a reminder and becomes wallpaper.
+
+    Writes a table row (a row means SENT, per follow-ups.md's own contract) and appends
+    a fresh pin for the next nudge, under the same shared lock career-ops uses.
+    """
+    a=next((x for x in apps() if x["num"]==str(num)),None)
+    if not a: return dict(ok=False, msg="Role not found.")
+    f=CO/"data/follow-ups.md"
+    body=read(f)
+    if not body.strip(): return dict(ok=False, msg="data/follow-ups.md is missing.")
+    nums=[int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", body, re.M)]
+    rownum=(max(nums)+1) if nums else 1
+    today=datetime.date.today()
+    nxt=today+datetime.timedelta(days=FOLLOWUP_GAP_DAYS)
+    def cell(x): return (str(x) or "").replace("|","/").strip()
+    row=(f"| {rownum} | {a['num']} | {today.isoformat()} | {cell(a['company'])} | {cell(a['role'])} | "
+         f"{cell(channel) or 'LinkedIn'} | {cell(contact)} | {cell(notes) or 'Follow-up sent via JobHelm'} |")
+    lines=body.rstrip().splitlines()
+    # insert after the last existing table row so the table stays contiguous, else append
+    last=max((i for i,l in enumerate(lines) if l.startswith("|")), default=len(lines)-1)
+    lines.insert(last+1, row)
+    lines.append(f"- next #{a['num']} {nxt.isoformat()} (set {today.isoformat()})")
+    f.write_text("\n".join(lines)+"\n")
+    return dict(ok=True, msg=f"Logged follow-up to {a['company']} ✓ — next nudge pinned for {nxt.isoformat()}.")
+
 def _followups_due_local(limit=6):
     """Fallback for when the engine cannot run: last pin wins, closed roles excluded.
 
@@ -2315,6 +2348,12 @@ function renderBoard(){
   }).join('');
 }
 
+function logFollowup(num,channel){
+  var c=(document.getElementById('fuc')||{}).value||'';
+  var n=(document.getElementById('fun')||{}).value||'';
+  act('log_followup',{num:num,channel:channel,contact:c,notes:n});
+}
+
 /* ---------- drawer ---------- */
 var _openNum=null;
 function openDrawer(num){_openNum=num;var p=byNum(num);if(!p)return;renderDrawer(p);
@@ -2368,6 +2407,14 @@ function renderDrawer(p){
       '<button class="sm" title="Posting closed / cancelled / no longer available" onclick="if(confirm(\\'Discard '+esc(p.company)+'? (posting closed / not available) — it drops off the active board.\\'))act(\\'discard\\',{num:\\''+p.num+'\\'})">🗑 Discard (not available)</button>'+
       '<button class="sm" title="Rejected by the company" onclick="if(confirm(\\'Mark '+esc(p.company)+' Rejected? It drops off the active board.\\'))act(\\'reject\\',{num:\\''+p.num+'\\'})">✗ Rejected</button>'+
     '</div></div>'+
+    '<div class="sec"><div class="h">📮 Follow-up</div>'+
+      '<div class="sm muted" style="margin-bottom:6px">Log it once you have actually sent it — that is what clears it off Next actions and pins the next nudge.</div>'+
+      '<input id="fuc" placeholder="who you contacted (optional)" style="width:100%;margin-bottom:6px">'+
+      '<input id="fun" placeholder="what you said (optional)" style="width:100%;margin-bottom:7px">'+
+      '<div class="actions">'+
+        '<button class="sm p" onclick="logFollowup(\\''+p.num+'\\',\\'LinkedIn\\')">✓ Logged on LinkedIn</button>'+
+        '<button class="sm" onclick="logFollowup(\\''+p.num+'\\',\\'Email\\')">✓ Logged by email</button>'+
+      '</div></div>'+
     '<div class="sec"><div class="h">✍️ Draft a reply (review before sending)</div>'+
       '<textarea id="dmsg" style="width:100%;min-height:64px" placeholder="Paste recruiter/HM message for '+esc(p.company)+'…"></textarea>'+
       '<div style="margin-top:7px"><button class="sm p" onclick="draft(\\'dmsg\\',\\'ddraft\\')">Draft reply</button> <span class="sm muted">flags spam · adds your mobile</span></div>'+
@@ -2612,6 +2659,7 @@ class H(BaseHTTPRequestHandler):
         elif p=="/api/discard": self._send(200,json.dumps(do_discard(args.get("num"))))
         elif p=="/api/reject": self._send(200,json.dumps(do_reject(args.get("num"))))
         elif p=="/api/stage": self._send(200,json.dumps(do_stage(args.get("num"),args.get("state"))))
+        elif p=="/api/log_followup": self._send(200,json.dumps(do_log_followup(args.get("num"),args.get("channel",""),args.get("contact",""),args.get("notes",""))))
         elif p=="/api/mock":  self._send(200,json.dumps(do_mock(args.get("num"),args.get("co",""))))
         elif p=="/api/draft": self._send(200,json.dumps(do_draft(args.get("message",""))))
         elif p=="/api/open":  self._send(200,json.dumps(do_open(args.get("co",""))))

@@ -234,6 +234,36 @@ finally:
     if _had: _qb.write_text(_prior)
     else: _qb.unlink()
 
+print("== a sent follow-up can be logged, so the reminder can be cleared ==")
+# The cadence engine supersedes a pin once a follow-up row is logged after it — but
+# nothing could write that row, so followupCount stayed 0 forever and the panel named
+# the same overdue roles no matter how many notes went out.
+_f = mc.CO / "data" / "follow-ups.md"
+_prior = _f.read_text() if _f.exists() else ""
+_app = next((a for a in mc.apps() if a["status"].lower() == "applied"), None)
+try:
+    if _app:
+        _r = mc.do_log_followup(_app["num"], channel="LinkedIn", contact="A Recruiter", notes="checked in")
+        _after = _f.read_text()
+        _row = [l for l in _after.splitlines() if l.startswith("|") and f'| {_app["num"]} |' in l]
+        check("logging a follow-up succeeds", _r["ok"], _r)
+        check("a table row is written (a row means SENT)", len(_row) == 1, _row)
+        check("the row carries the channel and contact",
+              _row and "LinkedIn" in _row[0] and "A Recruiter" in _row[0], _row)
+        check("the next nudge is pinned forward",
+              f'- next #{_app["num"]} ' in _after and _after.rstrip().endswith(")"), _after[-70:])
+        check("the pin is in the future", any(
+              l.startswith(f'- next #{_app["num"]} ') and l.split()[3] > datetime.date.today().isoformat()
+              for l in _after.splitlines()), [l for l in _after.splitlines() if l.startswith("- next")][-1:])
+        mc.do_log_followup(_app["num"], notes="a | b")   # free text must not forge a column
+        _after2 = _f.read_text()
+        _bad = [l for l in _after2.splitlines() if l.startswith("|") and l.count("|") > 9]
+        check("no row gains extra columns from user text", not _bad, _bad)
+    _r2 = mc.do_log_followup("999999")
+    check("an unknown role is refused", _r2["ok"] is False, _r2)
+finally:
+    if _prior: _f.write_text(_prior)
+
 print("== a role selected and never applied to says so ==")
 # The one failure mode entirely inside your own control, and the silent one: a card
 # looks identical on day 1 and day 17. Two roles sat 15 and 17 days before this existed.
