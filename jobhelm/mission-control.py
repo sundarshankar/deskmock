@@ -635,17 +635,22 @@ def do_scan():
     msg=(f"Scan done — {L.get('companies','?')} ATS companies · {L.get('found','?')} found · "
          f"{L.get('new','0')} NEW. Skipped {L.get('skipped','?')} "
          f"({L.get('f_title','0')} title, {L.get('f_location','0')} location, {L.get('dupes','0')} dupes).")
-    # widen the net — JobSpy (LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google) if its venv is set up.
-    # Point JOBHELM_JOBSPY at the python in a venv where `pip install python-jobspy` has been run.
-    _jv=os.environ.get("JOBHELM_JOBSPY","")
-    jv=pathlib.Path(_jv) if _jv else None
-    if jv and jv.exists() and (CO/"jobspy-scan.py").exists():
+    # widen the net — JobSpy (LinkedIn/Indeed) if its venv is set up. The script lives
+    # next to this file; it used to live inside the career-ops checkout, where an
+    # `update-system.mjs apply` could remove it. Both locations are checked so a move
+    # degrades to "aggregators skipped" out loud rather than silently halving the scan.
+    jv=HOME/"src/findingnemo/.jobspy-venv/bin/python"
+    js=next((p for p in (pathlib.Path(__file__).resolve().parent/"jobspy-scan.py", CO/"jobspy-scan.py") if p.exists()), None)
+    if jv.exists() and js:
         try:
-            r=subprocess.run([str(jv),"jobspy-scan.py","--days","7"],cwd=CO,capture_output=True,text=True,timeout=600)
+            r=subprocess.run([str(jv),str(js),"--days","7","--career-ops",str(CO)],
+                             cwd=str(js.parent),capture_output=True,text=True,timeout=900)
             mj=re.search(r"appended (\d+) to pipeline", r.stdout or "")
-            msg+=f" + LinkedIn/Indeed/Glassdoor/ZipRecruiter/Google: {mj.group(1) if mj else '0'} NEW."
+            msg+=f" + aggregators: {mj.group(1) if mj else '0'} NEW."
         except Exception as e:
             msg+=f" (aggregator scan skipped: {str(e)[:60]})"
+    elif jv.exists():
+        msg+=" (aggregator scan skipped: jobspy-scan.py not found)"
     return dict(ok=True, msg=msg)
 
 def do_apply(num):
