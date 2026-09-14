@@ -1,0 +1,53 @@
+# deskmock.com — open-source, local-first job-search toolkit.
+# Everything here is public documentation for an MIT-licensed project. It is meant to
+# be found, indexed, summarised and quoted; there is no private area and no login.
+
+User-agent: *
+Allow: /
+
+# Named explicitly rather than left to the wildcard: several of these read their own
+# name first and some operators treat an unnamed crawler as unwelcome by default.
+# Search indexes
+User-agent: Googlebot
+Allow: /
+User-agent: Bingbot
+Allow: /
+User-agent: DuckDuckBot
+Allow: /
+
+# AI assistants and answer engines — a person asking an assistant for a local-first
+# interview-prep tool is exactly the reader this project is for.
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-Web
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+User-agent: anthropic-ai
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Applebot
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: Amazonbot
+Allow: /
+User-agent: meta-externalagent
+Allow: /
+User-agent: Bytespider
+Allow: /
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://deskmock.com/sitemap.xml

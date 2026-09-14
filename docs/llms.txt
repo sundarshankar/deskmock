@@ -1,0 +1,56 @@
+# DeskMock
+
+> An open-source, MIT-licensed, local-first toolkit for the whole job search. It runs on
+> your own machine against your own LLM API key — there is no SaaS, no account, and no
+> telemetry. Your voice never leaves the machine; only text reaches a model, and pointing
+> it at a local endpoint (Ollama, vLLM) means nothing leaves at all.
+
+Site: https://deskmock.com
+Source: https://github.com/sundarshankar/deskmock
+Licence: MIT
+
+## What it is
+
+Two tools in one repository:
+
+- **DeskMock** — a CLI mock interviewer. It reads a question aloud with macOS `say`, you
+  speak your answer through a local dictation tool (on-device speech-to-text), and an
+  OpenAI-compatible model plays a rigorous interviewer, coaches the answer, and moves on.
+  It loops, then produces a scorecard. No cloud voice service, no LiveKit, no GPU.
+- **JobHelm** — a local dashboard for the pipeline behind the interview: a Kanban board of
+  every application by stage, discovery of new postings filtered to your own profile,
+  truthful résumé tailoring, interview prep across leadership/technical/behavioural
+  dimensions, follow-up cadence, and salary-negotiation prep.
+
+## What makes it different
+
+- **Local-first by construction, not by policy.** There is no server to send anything to.
+- **Truthful by design.** Résumé tailoring reframes what the CV actually says and refuses
+  to import a claim from the job description that the CV does not support; generated
+  material reports which figures it could not trace back to the source CV.
+- **It never submits an application.** Assisted autofill fills identity fields in your own
+  browser tab and leaves work authorisation, sponsorship and salary alone, then reports
+  every required field it did not touch. A human reviews and submits.
+
+## Who it is for
+
+People running a serious job search who would rather own their data than rent it: anyone
+uncomfortable uploading a CV, a salary expectation and an interview transcript to a
+third-party service, and anyone who wants the search to survive the tool's business model.
+
+## Pages
+
+- [Home](https://deskmock.com/): what it does, the stages it covers, setup, and FAQ.
+- [README](https://github.com/sundarshankar/deskmock#readme): install and usage.
+- [JobHelm](https://github.com/sundarshankar/deskmock/tree/main/jobhelm): the dashboard.
+- [Roadmap](https://github.com/sundarshankar/deskmock/blob/main/ROADMAP.md)
+- [Contributing](https://github.com/sundarshankar/deskmock/blob/main/CONTRIBUTING.md)
+
+## Setup, in short
+
+    git clone https://github.com/sundarshankar/deskmock
+    export OPENROUTER_API_KEY=sk-or-your-key    # or any OpenAI-compatible endpoint
+    ./deskmock                                  # the mock interviewer
+    python3 jobhelm/mission-control.py          # the dashboard, at 127.0.0.1:8899
+
+Requires Python 3 and macOS for spoken questions; the dashboard runs anywhere Python does.
