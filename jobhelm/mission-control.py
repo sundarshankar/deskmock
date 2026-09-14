@@ -2159,6 +2159,22 @@ async function selectMatch(btn,url,co,title,posted){
 
 function setFilter(k){FILTER=k;load();}
 
+/* A role you selected and did not apply to is the one failure mode entirely inside
+   your own control, and it is silent: the card looks identical on day 1 and day 17.
+   Vertafore sat 17 days and Crossing Hurdles 15 before this existed — by then the
+   posting has the queue in front of it that makes applying pointless. */
+var STALE_DAYS=3;
+function ageDays(d){
+  if(!d) return null;
+  var t=Date.parse(String(d)+'T00:00:00'); if(isNaN(t)) return null;
+  return Math.floor((Date.now()-t)/86400000);
+}
+function staleBadge(p){
+  if(stageOf(p.status)!=='evaluated') return '';
+  var a=ageDays(p.date); if(a==null||a<STALE_DAYS) return '';
+  var c=a>=7?'var(--red)':'var(--amber)';
+  return '<div class="meta"><span style="color:'+c+';font-weight:600" title="Selected '+a+' days ago and still not applied — a posting this old already has a queue in front of it">⏳ '+a+'d in queue</span></div>';
+}
 function card(p){
   var pc='<span class="dot'+(p.haspack?' on':'')+'" title="prep pack"></span><span class="dot'+(p.hasq?' on':'')+'" title="questions"></span><span class="dot'+(p.hasgap?' on':'')+'" title="gap analysis"></span>';
   var qa='';
@@ -2175,6 +2191,7 @@ function card(p){
     '<div class="rb"><i style="width:'+p.ready+'%;background:'+rc(p.ready)+'"></i></div>'+
     '<div class="meta"><span style="color:'+rc(p.ready)+'">'+p.ready+'% ready</span><span class="pc">'+pc+'</span></div>'+
     (p.contact?'<div class="meta"><span class="warm">🤝 warm path</span></div>':'')+
+    staleBadge(p)+
     '<div class="qa">'+qa+'</div>'+
   '</div>';
 }
@@ -2251,7 +2268,10 @@ function renderBoard(){
       (!q || (p.company+' '+p.role).toLowerCase().indexOf(q)>=0)});
     return '<div class="col" data-stage="'+st[0]+'" ondragover="dragOver(event)"'+
       ' ondragleave="dragLeave(event)" ondrop="dropCard(event,\\''+st[0]+'\\')">'+
-      '<h3>'+st[1]+'<span class="c">'+items.length+'</span></h3>'+
+      '<h3>'+st[1]+(st[0]==='evaluated'&&items.filter(function(p){var a=ageDays(p.date);return a!=null&&a>=STALE_DAYS}).length
+          ?' <span style="color:var(--amber);font-weight:600" title="selected more than '+STALE_DAYS+' days ago and still not applied">⏳ '
+            +items.filter(function(p){var a=ageDays(p.date);return a!=null&&a>=STALE_DAYS}).length+' stale</span>':'')
+        +'<span class="c">'+items.length+'</span></h3>'+
       (items.length?items.map(card).join(''):'<div class="empty">—</div>')+'</div>';
   }).join('');
 }

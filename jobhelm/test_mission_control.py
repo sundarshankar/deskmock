@@ -213,6 +213,14 @@ finally:
     if _had: _qb.write_text(_prior)
     else: _qb.unlink()
 
+print("== a role selected and never applied to says so ==")
+# The one failure mode entirely inside your own control, and the silent one: a card
+# looks identical on day 1 and day 17. Two roles sat 15 and 17 days before this existed.
+check("the staleness badge is on the page", "staleBadge" in mc.PAGE and "in queue" in mc.PAGE)
+check("only To apply cards can go stale", "stageOf(p.status)!=='evaluated'" in mc.PAGE)
+check("the column counts its stale cards", "stale</span>" in mc.PAGE)
+check("the threshold is one named constant", mc.PAGE.count("var STALE_DAYS=") == 1)
+
 print("== a truncated reasoning model reports a budget problem, not gibberish ==")
 # A reasoning model spends max_tokens on thinking BEFORE it writes the answer. Too small a
 # budget returns finish_reason=length with content empty and the reasoning stream in its
