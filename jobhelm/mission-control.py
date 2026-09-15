@@ -748,11 +748,40 @@ STAGE_LABELS = {"evaluated":"Evaluated","applied":"Applied","responded":"Respond
 INBOX_PROPOSALS = CO/"data/inbox-proposals.json"
 
 def inbox_proposals():
+    """Proposals, re-checked against the board as it is NOW.
+
+    A proposal records the row's status at the moment it was generated. Approve one and
+    every other proposal for that role still shows the old status — a FanDuel receipt
+    reading "Applied -> no change" for a role that had just been marked Rejected. Worse
+    than cosmetic: a queue that argues with the board teaches you to distrust the board.
+
+    So `current` is refreshed from the tracker on every read, and anything the board has
+    already overtaken is dropped rather than shown. An automated receipt is the clearest
+    case — once a human has replied or the role is closed, proof that the application
+    arrived in August answers a question nobody is asking.
+    """
     try:
         d=json.loads(read(INBOX_PROPOSALS) or "{}")
-        return d.get("proposals") or []
+        rows=d.get("proposals") or []
     except Exception:
         return []
+    by_num={a["num"]: a for a in apps()}
+    TERMINAL={"rejected","discarded","hired","skip"}
+    out, seen = [], set()
+    for p in rows:
+        a=by_num.get(str(p.get("num")))
+        if not a: continue                                  # row deleted since
+        cur=(a["status"] or "").strip()
+        low=cur.lower()
+        p["current"]=cur                                    # never show a stale status
+        if p.get("stage") and p["stage"].lower()==low: continue        # already there
+        if p.get("kind")=="ack" and low not in ("applied","evaluated"): continue
+        if low in TERMINAL and p.get("kind") in ("ack","responded"): continue
+        key=(p.get("num"), p.get("kind"), p.get("subject",""), p.get("date",""))
+        if key in seen: continue                            # the same mail twice
+        seen.add(key)
+        out.append(p)
+    return out
 
 def _write_proposals(rows):
     try:
@@ -2508,7 +2537,7 @@ function renderInbox(){
         +'<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">'
           +'<span style="font-size:15px">'+k[0]+'</span>'
           +'<b>'+esc(p.company)+'</b><span class="sm muted">'+esc(p.role||'')+'</span>'
-          +'<span class="sm" style="margin-left:auto;color:'+cc+'" title="'+esc(p.why||'')+'">'+conf+'% sure</span>'
+          +'<span class="sm" style="margin-left:auto;color:'+cc+'" title="How confident that this email belongs to THIS application — not how confident the verdict is. Matched on: '+esc(p.why||'')+'. The verdict comes from the quoted line below; read it before applying.">'+conf+'% match · '+esc((p.why||'').split(' + ')[0])+'</span>'
         +'</div>'
         +'<div class="sm" style="margin:4px 0">'+esc(p.current||'')+' → '+to+'</div>'
         +'<div class="sm muted">'+esc(p.date||'')+' · '+esc(p.from||'')+' · '+esc(p.subject||'')+'</div>'

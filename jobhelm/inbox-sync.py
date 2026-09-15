@@ -126,17 +126,30 @@ def match_row(email, apps):
         elif cslug and len(cslug) >= 4 and cslug in mc.slug(low):
             conf, why = 0.65, "company named in the message"
         if conf:
-            # two roles at one employer: let the title break the tie
+            # Two roles at one employer is the case that actually goes wrong: both Home
+            # Depot rejections landed on one row while the other sat there reading
+            # "Applied", even though each email named its role in full. So count HOW MUCH
+            # of the title matches and carry that score, rather than treating any two
+            # words as a pass — the better-matching row should win outright.
             toks = [t for t in re.split(r"[^a-z]+", (a["role"] or "").lower()) if len(t) > 3]
-            if toks and sum(1 for t in toks if t in low) >= 2:
+            hits = sum(1 for t in set(toks) if t in low)
+            if hits >= 2:
                 conf, why = min(0.99, conf + 0.06), why + " + role title"
-            scored.append((conf, a, why))
+            scored.append((conf, a, why, hits))
     if not scored: return None, 0.0, "no tracked application matched"
-    scored.sort(key=lambda x: (-x[0], x[1]["num"]))
+    # title overlap breaks a tie before confidence does
+    scored.sort(key=lambda x: (-x[0], -x[3], x[1]["num"]))
     best = scored[0]
-    # A tie between two rows is exactly the case to ask about rather than guess.
-    if len(scored) > 1 and abs(scored[1][0] - best[0]) < 0.02:
-        return best[1], round(best[0] * 0.7, 2), f"{best[2]} (ambiguous with {scored[1][1]['company']})"
+    if len(scored) > 1:
+        second = scored[1]
+        close = abs(second[0] - best[0]) < 0.02
+        if close and best[3] > second[3]:
+            # same signal, but this row's title genuinely matches the message better
+            return best[1], round(best[0], 2), f"{best[2]} ({best[3]} title words vs {second[3]})"
+        if close:
+            # Still indistinguishable. Say so rather than guess — a wrong row here marks
+            # the wrong application rejected and leaves a live one looking dead.
+            return best[1], round(best[0] * 0.7, 2), f"{best[2]} (ambiguous with {second[1]['company']})"
     return best[1], round(best[0], 2), best[2]
 
 
@@ -209,6 +222,8 @@ FIXTURES = [
           "date": "2026-08-18", "body": "Thank you for applying to Alight for R-37852."}),
   dict(**{"from": "deals@some-newsletter.com", "subject": "50% off this week only",
           "date": "2026-09-01", "body": "Shop the sale."}),
+  dict(**{"from": "noreply@myworkday.com", "subject": "Thank You for Your Interest in The Home Depot",
+          "date": "2026-08-14", "body": "Thank you for applying for the Software Engineering Manager - Reliability Engineering, Store Systems (Remote), Req188773 position with The Home Depot. After careful consideration, we will not be moving you forward."}),
   dict(**{"from": "recruiting@northerntrust.com", "subject": "Global Head of Platform Engineering",
           "date": "2026-09-02", "body": "We are pleased to offer you the position."}),
 ]
@@ -227,6 +242,11 @@ FIXTURE_APPS = [
    "status": "Applied", "notes": "Applied via Alight Workday (R-37852)."},
   {"num": "10", "company": "Northern Trust", "role": "Global Head of Platform Engineering",
    "status": "Applied", "notes": "Applied direct."},
+  # the pair that broke it: one employer, two roles, one ATS, no req id in the notes
+  {"num": "6", "company": "Home Depot", "role": "Sr Manager, SW Engineering - Cloud Engineering",
+   "status": "Applied", "notes": "Applied via Workday."},
+  {"num": "7", "company": "Home Depot", "role": "SWE Manager, Reliability Engineering - Store Systems",
+   "status": "Applied", "notes": "Applied via Workday."},
 ]
 
 
@@ -237,9 +257,16 @@ def self_test():
         if c: ok += 1; print(f"  ok   {n}")
         else: fail += 1; print(f"  FAIL {n}  {d}")
 
+    # Fixtures are looked up by a distinctive word in the subject, never by index: an
+    # index-based table silently re-points at the wrong fixture the moment one is inserted.
+    def fx(word):
+        return next(e for e in FIXTURES if word.lower() in e["subject"].lower())
+
     print("== classify ==")
-    for e, want in zip(FIXTURES, ["ack", "rejected", "interview", "ack", "other", "offer"]):
-        got, _ = classify(e)
+    for word, want in [("FanDuel", "ack"), ("Update on your", "rejected"), ("next steps", "interview"),
+                       ("Alight", "ack"), ("50% off", "other"), ("Global Head", "offer"),
+                       ("Home Depot", "rejected")]:
+        e = fx(word); got, _ = classify(e)
         check(f"{e['subject'][:44]:<44} -> {want}", got == want, f"got {got}")
     check("a rejection that opens politely is still a rejection",
           classify({"subject": "Thank you for applying", "body": "Thank you for applying. Unfortunately we are moving forward with other candidates."})[0] == "rejected")
@@ -247,13 +274,20 @@ def self_test():
 
     print("\n== match ==")
     apps = FIXTURE_APPS
-    for e, want in [(FIXTURES[0], "FanDuel"), (FIXTURES[1], "pfizer"), (FIXTURES[2], "Alteryx"),
-                    (FIXTURES[3], "Alight"), (FIXTURES[5], "Northern Trust")]:
+    for e, want in [(fx("FanDuel"), "FanDuel"), (fx("Update on your"), "pfizer"),
+                    (fx("next steps"), "Alteryx"), (fx("Alight"), "Alight"),
+                    (fx("Global Head"), "Northern Trust")]:
         row, conf, why = match_row(e, apps)
         check(f"{e['subject'][:40]:<40} -> {want} ({conf})",
               row is not None and mc.slug(row["company"]) == mc.slug(want), f"got {row and row['company']} ({why})")
-    row, conf, _ = match_row(FIXTURES[4], apps)
+    row, conf, _ = match_row(fx("50% off"), apps)
     check("an unrelated newsletter matches nothing", row is None, row and row["company"])
+    # Both Home Depot rejections landed on row 6 while row 7 sat reading "Applied",
+    # although each email named its role in full.
+    row, conf, why = match_row(fx("Home Depot"), apps)
+    check("two roles at one employer: the title picks the right row",
+          row is not None and row["num"] == "7", f"got #{row and row['num']} ({why})")
+    check("...and it is not written off as ambiguous", "ambiguous" not in why, why)
 
     print("\n== propose ==")
     ps = propose(FIXTURES, FIXTURE_APPS)
@@ -268,10 +302,10 @@ def self_test():
           [p["kind"] for p in ps].index("offer") < [p["kind"] for p in ps].index("ack") if "ack" in kinds else True)
 
     print("\n== contacts come OUT of the sync ==")
-    c = contact_from(FIXTURES[2])
+    c = contact_from(fx("next steps"))
     check("a named human becomes a contact", c and c["email"] == "mplank@alteryx.com" and c["name"] == "Marlin Plank", c)
-    check("a no-reply address does not", contact_from(FIXTURES[0]) is None)
-    check("an ATS sender does not", contact_from(FIXTURES[3]) is None)
+    check("a no-reply address does not", contact_from(fx("FanDuel")) is None)
+    check("an ATS sender does not", contact_from(fx("Alight")) is None)
 
     print(f"\n==== {ok} passed, {fail} failed ====")
     return 1 if fail else 0
