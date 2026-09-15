@@ -736,8 +736,14 @@ def do_reject(num):
 # had no way to record a reply short of an interview, so anything that came back from a
 # company stayed parked in Applied. Labels must match templates/states.yml exactly —
 # set-status.mjs validates against it and refuses anything else.
+# Every canonical state in templates/states.yml, not just the forward ones. This table
+# was written for the board's stage buttons, which only ever move a role FORWARD —
+# rejection had its own endpoint. Then inbox sync started proposing "rejected" from a
+# rejection email and hit "Unknown stage": a state the tracker uses every day, that the
+# one generic status writer did not know. Terminal states belong here too.
 STAGE_LABELS = {"evaluated":"Evaluated","applied":"Applied","responded":"Responded",
-                "interview":"Interview","offer":"Offer","hired":"Hired"}
+                "interview":"Interview","offer":"Offer","hired":"Hired",
+                "rejected":"Rejected","discarded":"Discarded","skip":"SKIP"}
 
 INBOX_PROPOSALS = CO/"data/inbox-proposals.json"
 

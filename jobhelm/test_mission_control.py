@@ -380,6 +380,13 @@ if _states.exists():
     _labels = set(_re2.findall(r"^\s*label:\s*(.+?)\s*$", mc.read(_states), _re2.M))
     _bad = [v for v in mc.STAGE_LABELS.values() if v not in _labels]
     check("every STAGE_LABELS value is a canonical state", not _bad, f"unknown: {_bad}")
+    # The inverse is the one that bit: this table was written for the board's forward-only
+    # buttons, so "Rejected" was missing — and the day something proposed a rejection
+    # through the generic writer it failed with "Unknown stage" on a state the tracker
+    # uses daily. A state the tracker can hold must be a state this can write.
+    _unreachable = sorted(_labels - set(mc.STAGE_LABELS.values()))
+    check("every canonical state is reachable through do_stage", not _unreachable,
+          f"cannot be written: {_unreachable}")
 else:
     print("  skip canonical-state cross-check (no templates/states.yml in sample data)")
 

@@ -1,0 +1,28 @@
+# Canonical states — the contract between the writer (career-ops) and this dashboard.
+# Mirrors career-ops/templates/states.yml. It ships with the sample data so the
+# cross-check in the test suite actually RUNS: without it the check skipped silently,
+# which is how a missing "Rejected" survived long enough to fail in a user's hands.
+states:
+  - id: evaluated
+    label: Evaluated
+  - id: applied
+    label: Applied
+  - id: responded
+    label: Responded
+  - id: interview
+    label: Interview
+  - id: offer
+    label: Offer
+    terminal: true
+  - id: rejected
+    label: Rejected
+    terminal: true
+  - id: discarded
+    label: Discarded
+    terminal: true
+  - id: skip
+    label: SKIP
+    terminal: true
+  - id: hired
+    label: Hired
+    terminal: true
