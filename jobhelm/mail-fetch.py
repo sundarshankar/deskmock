@@ -72,18 +72,29 @@ def board_domains():
     return sorted(out)
 
 
-def gmail_query(days, domains):
-    """Gmail's own search syntax, via IMAP X-GM-RAW.
+# Gmail's IMAP parser rejects a long X-GM-RAW string — a single query naming every ATS
+# host AND every company on the board came to 971 characters and failed with "Could not
+# parse command". The failure was invisible: the code fell back to a plain SINCE, which
+# on All Mail returns EVERY message in the window (2,485 of them here), got truncated to
+# the most recent few hundred, and buried the job mail in everything else. So: several
+# short queries, unioned. Each one stays well inside what the server will parse.
+MAX_QUERY = 250
 
-    Scoped deliberately: mail from an ATS, or from a domain resembling a company on the
-    board, or carrying application language. Not "everything in the mailbox" — there is
-    no reason for this to read your bank mail to find out whether Pfizer replied.
-    """
-    froms = " OR ".join(f"from:{h}" for h in ATS_HOSTS)
-    cos = " OR ".join(f"from:{d}" for d in domains) if domains else ""
-    subj = 'subject:(application OR interview OR recruiter OR candidacy OR "next steps" OR offer)'
-    parts = [p for p in (froms, cos, subj) if p]
-    return f'newer_than:{days}d ({" OR ".join(parts)})'
+
+def gmail_queries(days, domains):
+    qs = []
+    def add(terms):
+        q = f'newer_than:{days}d ({" OR ".join(terms)})'
+        if len(q) <= MAX_QUERY: qs.append(q)
+        elif len(terms) > 1:                      # too long — split and retry both halves
+            mid = len(terms) // 2
+            add(terms[:mid]); add(terms[mid:])
+    for i in range(0, len(ATS_HOSTS), 6):
+        add([f"from:{h}" for h in ATS_HOSTS[i:i + 6]])
+    for i in range(0, len(domains), 5):
+        add([f"from:{d}" for d in domains[i:i + 5]])
+    qs.append(f"newer_than:{days}d subject:(application OR interview OR recruiter OR candidacy OR offer)")
+    return qs
 
 
 def decode(v):
@@ -125,10 +136,50 @@ def keep(frm, subject):
     return bool(SUBJECT_HINTS.search(subject or ""))
 
 
+def _search_all(M, queries, days, verbose):
+    """Union of several short searches, with a safe fallback if the server refuses them."""
+    ids, ok = [], False
+    for q in queries:
+        try:
+            typ, data = M.search(None, "X-GM-RAW", f'"{q}"')
+            if typ != "OK": continue
+            ok = True
+            ids.extend(data[0].split() if data and data[0] else [])
+        except imaplib.IMAP4.error as e:
+            if verbose: print(f"  ! query refused ({str(e)[:50]}): {q[:60]}", file=sys.stderr)
+    if not ok:
+        # Not Gmail, or Gmail said no to everything. SINCE returns the whole window, which
+        # is why the header pass below exists: nothing downloads a body it will discard.
+        since = (datetime.date.today() - datetime.timedelta(days=days)).strftime("%d-%b-%Y")
+        typ, data = M.search(None, "SINCE", since)
+        ids = data[0].split() if data and data[0] else []
+        if verbose: print(f"  (server-side filtering unavailable — sieving {len(ids)} locally)", file=sys.stderr)
+    seen, uniq = set(), []
+    for i in ids:
+        if i not in seen: seen.add(i); uniq.append(i)
+    return uniq
+
+
+def _headers(M, ids, chunk=200):
+    """One batched round trip per chunk for FROM/SUBJECT/DATE — not one per message."""
+    out = {}
+    for k in range(0, len(ids), chunk):
+        batch = b",".join(ids[k:k + chunk])
+        typ, data = M.fetch(batch, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+        if typ != "OK": continue
+        for item in data:
+            if not isinstance(item, tuple) or len(item) < 2: continue
+            m = re.match(rb"\s*(\d+)\s+\(", item[0] or b"")
+            if not m: continue
+            msg = email.message_from_bytes(item[1])
+            out[m.group(1)] = (decode(msg.get("From")), decode(msg.get("Subject")), msg.get("Date"))
+    return out
+
+
 def fetch(days, limit=400, verbose=True):
     creds = load_creds()
     domains = board_domains()
-    query = gmail_query(days, domains)
+    queries = gmail_queries(days, domains)
     if verbose:
         print(f"  connecting to {creds['IMAP_HOST']} as {creds['IMAP_USER']} (read-only)", file=sys.stderr)
     M = imaplib.IMAP4_SSL(creds["IMAP_HOST"])
@@ -138,24 +189,24 @@ def fetch(days, limit=400, verbose=True):
         for box in ('"[Gmail]/All Mail"', "INBOX"):
             typ, _ = M.select(box, readonly=True)          # readonly: cannot alter the mailbox
             if typ == "OK": break
-        try:
-            typ, data = M.search(None, "X-GM-RAW", f'"{query}"')
-            if typ != "OK": raise imaplib.IMAP4.error("X-GM-RAW unsupported")
-        except imaplib.IMAP4.error:
-            since = (datetime.date.today() - datetime.timedelta(days=days)).strftime("%d-%b-%Y")
-            typ, data = M.search(None, "SINCE", since)      # any IMAP server; filtered locally below
-        ids = (data[0].split() if data and data[0] else [])[-limit:]
-        if verbose: print(f"  {len(ids)} message(s) to inspect", file=sys.stderr)
+        ids = _search_all(M, queries, days, verbose)
+        if verbose: print(f"  {len(ids)} candidate message(s) from {len(queries)} queries", file=sys.stderr)
+
+        # Headers first, bodies only for what survives. Downloading every body and THEN
+        # deciding meant a fallback search could pull hundreds of full messages — minutes
+        # of round trips — to keep a dozen.
+        heads = _headers(M, ids)
+        keepers = [i for i in ids if i in heads and keep(heads[i][0], heads[i][1])][-limit:]
+        if verbose: print(f"  {len(keepers)} look job-related — fetching those bodies", file=sys.stderr)
+
         out = []
-        for i in ids:
+        for i in keepers:
             typ, raw = M.fetch(i, "(BODY.PEEK[])")          # PEEK: does not set the \\Seen flag
             if typ != "OK" or not raw or not raw[0]: continue
             msg = email.message_from_bytes(raw[0][1])
-            frm, subject = decode(msg.get("From")), decode(msg.get("Subject"))
-            if not keep(frm, subject): continue
+            frm, subject, datehdr = heads[i]
             try:
-                d = email.utils.parsedate_to_datetime(msg.get("Date"))
-                date = d.date().isoformat()
+                date = email.utils.parsedate_to_datetime(datehdr).date().isoformat()
             except Exception:
                 date = ""
             out.append({"from": frm, "subject": subject, "date": date, "body": body_of(msg)})
@@ -174,11 +225,18 @@ def self_test():
         else: fail += 1; print(f"  FAIL {n}  {d}")
 
     print("== the query is scoped, not a mailbox dump ==")
-    q = gmail_query(30, ["alteryx", "fanduel"])
-    check("it is time-bounded", "newer_than:30d" in q, q)
-    check("it names the ATS hosts", "from:greenhouse.io" in q and "from:lever.co" in q)
-    check("it names the board's companies", "from:alteryx" in q and "from:fanduel" in q)
-    check("it never asks for everything", "in:anywhere" not in q and q.strip() != "")
+    qs = gmail_queries(30, ["alteryx", "fanduel"])
+    joined = " ".join(qs)
+    check("every query is time-bounded", all("newer_than:30d" in q for q in qs), qs)
+    check("the ATS hosts are covered", "from:greenhouse.io" in joined and "from:lever.co" in joined)
+    check("the board's companies are covered", "from:alteryx" in joined and "from:fanduel" in joined)
+    # A 971-char query is what Gmail rejected, silently falling back to "every message".
+    check("no query exceeds what the server will parse", all(len(q) <= MAX_QUERY for q in qs),
+          max((len(q) for q in qs), default=0))
+    check("a company list too long to fit is split, not dropped",
+          all("from:" + d in " ".join(gmail_queries(30, [f"company{i}withaverylongname" for i in range(40)]))
+              for d in ("company0withaverylongname", "company39withaverylongname")))
+    check("it never asks for everything", "in:anywhere" not in joined)
 
     print("\n== the local sieve ==")
     check("an ATS sender is kept", keep("no-reply@greenhouse.io", "hello"))
