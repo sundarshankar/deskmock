@@ -470,5 +470,19 @@ console.log(JSON.stringify(out));
 else:
     print("  skip drag-and-drop behaviour (node not installed)")
 
+print("\n== the mail pipeline's own suites ==")
+# inbox-sync and mail-fetch each carry a self-test that needs no mailbox and no network.
+# Run them from here so one command covers the whole pipeline rather than three.
+subprocess.Popen = _REAL_POPEN
+for _script in ("inbox-sync.py", "mail-fetch.py"):
+    _p = HERE / _script
+    if not _p.exists():
+        print(f"  skip {_script} (not present)"); continue
+    _r = subprocess.run([sys.executable, str(_p), "--self-test"], capture_output=True, text=True)
+    _tail = [l for l in (_r.stdout or "").splitlines() if l.startswith("====")]
+    check(f"{_script} self-test passes", _r.returncode == 0,
+          (_tail[-1] if _tail else (_r.stderr or "")[:160]))
+    if _tail: print(f"       {_tail[-1].strip()}")
+
 print(f"\n==== {PASS} passed, {FAIL} failed ====")
 sys.exit(1 if FAIL else 0)
