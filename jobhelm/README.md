@@ -162,6 +162,7 @@ node update-system.mjs apply          # apply it (your cv.md, tracker, etc. are 
 | Board is empty | You pointed `JOBHELM_CAREEROPS` at a folder with no `data/applications.md`. Unset it to see the sample board, or point at a real career-ops checkout. |
 | Drafts / briefs / rehearse say "No key" | `export OPENROUTER_API_KEY=sk-or-...` in the same shell, or drop an `openrouter.env` file next to the script. |
 | Scan / "Mark applied" fail | Those shell out to career-ops (`node scan.mjs`, `set-status.mjs`). They need a real career-ops checkout with Node installed — they don't run against the sample data or inside the container. |
+| Prep-pack / story-bank PDF says "Fact check failed" | career-ops 1.37+ checks every PDF against `cv.md` and refuses employers, degrees or certifications it cannot find there verbatim. JobHelm passes `--skip-fact-check` for prep documents (they are prose, not CVs). Tailored résumés keep the check: put the exact phrasing in `cv.md`, or list the verified exception in `config/cv-facts.json` (`allow_facts`). |
 | Rehearse "Voice (Terminal)" does nothing | That launches DeskMock; set `JOBHELM_MOCK` to your DeskMock checkout. Or use **Rehearse here** (in-app), which needs no extra setup. |
 | Port already in use | `JOBHELM_PORT=8900 python3 jobhelm/mission-control.py` |
 

@@ -652,9 +652,9 @@ def build_state(days=None):
         ts=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
 # ---------- actions ----------
-def run(cmd, cwd):
+def run(cmd, cwd, timeout=180):
     try:
-        r=subprocess.run(cmd,cwd=cwd,capture_output=True,text=True,timeout=180)
+        r=subprocess.run(cmd,cwd=cwd,capture_output=True,text=True,timeout=timeout)
         return (r.returncode==0, (r.stdout or r.stderr)[-1500:])
     except Exception as e:
         return (False, str(e))
@@ -672,7 +672,7 @@ def _open_file(path):
     except Exception: return False
 
 def do_scan():
-    ok,out=run(["node","scan.mjs"],CO)
+    ok,out=run(["node","scan.mjs"],CO,timeout=900)   # a full ATS sweep is 80-130s; 180 was one slow portal away from "Scan failed"
     if not ok: return dict(ok=False, msg=f"Scan failed: {out[-200:]}")
     L=scan_coverage().get("last",{})
     msg=(f"Scan done — {L.get('companies','?')} ATS companies · {L.get('found','?')} found · "
@@ -688,7 +688,7 @@ def do_scan():
         try:
             r=subprocess.run([str(jv),str(js),"--days","7","--career-ops",str(CO)],
                              cwd=str(js.parent),capture_output=True,text=True,timeout=900)
-            mj=re.search(r"appended (\d+) to pipeline", r.stdout or "")
+            mj=re.search(r"appended (\d+) to", r.stdout or "")
             msg+=f" + aggregators: {mj.group(1) if mj else '0'} NEW."
         except Exception as e:
             msg+=f" (aggregator scan skipped: {str(e)[:60]})"
@@ -1498,7 +1498,7 @@ def _make_prep_pack_file(company, role):
     outhtml=CO/"interview-prep"/f"{slug(company)}-prep.html"; outhtml.write_text(doc)
     if (CO/"generate-pdf.mjs").exists():
         outpdf=CO/"interview-prep"/f"{slug(company)}-prep-pack.pdf"
-        ok,gout=run(["node","generate-pdf.mjs",str(outhtml),str(outpdf),"--format=letter"],CO)
+        ok,gout=run(["node","generate-pdf.mjs",str(outhtml),str(outpdf),"--format=letter","--skip-fact-check"],CO)  # prep doc, not a CV: career-ops >=1.37 fact-checks CVs against cv.md
         if ok:
             cm=HERE.parent/"clean-markers.mjs"   # bundled at the deskmock repo root
             if cm.exists(): run(["node",str(cm),"clean",str(outpdf),"--author",(NAME or "Candidate")], cm.parent)
@@ -1571,7 +1571,7 @@ def _render_open(md_path, stem):
     doc=f"<!doctype html><html><head><meta charset='utf-8'>{_PREP_CSS}</head><body>"+_md2html(read(md_path))+"</body></html>"
     outhtml=CO/"interview-prep"/f"{stem}.html"; outhtml.write_text(doc); target=outhtml
     if (CO/"generate-pdf.mjs").exists():
-        pdf=CO/"interview-prep"/f"{stem}.pdf"; ok,_g=run(["node","generate-pdf.mjs",str(outhtml),str(pdf),"--format=letter"],CO)
+        pdf=CO/"interview-prep"/f"{stem}.pdf"; ok,_g=run(["node","generate-pdf.mjs",str(outhtml),str(pdf),"--format=letter","--skip-fact-check"],CO)  # prep doc, not a CV
         if ok:
             cm=HERE.parent/"clean-markers.mjs"
             if cm.exists(): run(["node",str(cm),"clean",str(pdf),"--author",(NAME or "Candidate")], cm.parent)
@@ -2778,7 +2778,7 @@ async function act(kind,args){
   if(_LONG[kind]){
     _longActive=kind;
     var t0=Date.now();
-    var paint=function(){var s=Math.round((Date.now()-t0)/1000);toast('<span class="spin"></span>'+_LONG[kind]+'… '+s+'s'+(kind==='open_prep_pdf'?'':' (usually 30–60s)'),true);};
+    var paint=function(){var s=Math.round((Date.now()-t0)/1000);toast('<span class="spin"></span>'+_LONG[kind]+'… '+s+'s'+(kind==='open_prep_pdf'?'':' (usually 2–5 min)'),true);};
     paint(); tick=setInterval(paint,1000);
   } else { toast('<span class="spin"></span>Working…',true); }
   try{
@@ -2792,7 +2792,7 @@ async function doScan(){
   if(_busy['scan']){toast('A scan is already running — one moment…');return}
   _busy['scan']=true;
   var t0=Date.now();
-  var tick=setInterval(function(){var s=Math.round((Date.now()-t0)/1000);toast('<span class="spin"></span>Scanning job boards… '+s+'s (usually 30–60s). Results will appear under Discover → Scan coverage.',true);},1000);
+  var tick=setInterval(function(){var s=Math.round((Date.now()-t0)/1000);toast('<span class="spin"></span>Scanning job boards… '+s+'s (usually 2–5 min). Results will appear under Discover → Scan coverage.',true);},1000);
   try{
     var r=await (await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})).json();
     clearInterval(tick); _busy['scan']=false;
