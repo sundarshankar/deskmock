@@ -26,7 +26,7 @@ scan ─→ match ─→ apply ─→ connect ─→ PREPARE ─→ interview �
 | **match** | Discover — fit score, dedupe, ranked |
 | **apply** | Select → **Tailor résumé** (fabrication + AI-tell + metadata gates) → assisted apply → archive-on-apply |
 | **connect** | Warm-path outreach drafts (review before you send) |
-| **prepare** | **Prep pack** (Leadership · Technical · Behavioral · Articles) + **Story Bank** + **Flashcards** (SM-2 spaced repetition) + **Drill weakest** |
+| **prepare** | **Prep pack** (Leadership · Technical · Behavioral · Articles) + **Story Bank** + **Flashcards** (SM-2 spaced repetition) + **Drill weakest** + **phone practice** ([deskmock.com/practice](https://deskmock.com/practice/)) |
 | **interview** | DeskMock rehearsal → scored per dimension → **Readiness** chart |
 | **negotiate** | **Negotiation prep** — comp benchmark (verify), leverage, scripts, scenarios |
 | **land** | offer accepted |
@@ -84,6 +84,27 @@ leadership/technical/articles/notes hub = **next**.
 - Offer walk-through before signing.
 
 _Status:_ career-ops has `negotiation-roi` / `offer-prep` groundwork — surface it in JobHelm = ongoing.
+
+### 5. Practise anywhere — DeskMock Cards
+A free, local-first spaced-repetition app for the phone that works with **any** content, with
+interview prep as the flagship deck. Anki proves the method; the gap is a free, modern, private
+option on iPhone, plus decks you don't have to write by hand.
+
+- **Phone practice app** ✅ — [deskmock.com/practice](https://deskmock.com/practice/): installable
+  web app (Add to Home Screen), offline, Again/Hard/Good/Easy scheduling, decks stay on the device.
+- **Multiple decks** — switch between interview prep, a certification, a language, etc.
+- **Import** — CSV (spreadsheets, Quizlet exports) and Anki `.apkg`, so existing decks work in seconds.
+- **Make a deck from text** — paste notes, a PDF or a CV and draft cards with your own API key or a
+  local model, using DeskMock's claim-tracing so generated answers stay true to the source.
+- **Interview Prep sample deck** + "Made with DeskMock" link.
+- **Native apps later, only if people use it** — wrap the web app once there is steady repeat usage;
+  App Store review rejects thin web wrappers (Guideline 4.2), so the native build needs real native
+  value: due-card notifications and a home-screen widget.
+- **Supporting a cause** — DeskMock is not a nonprofit, so donations can't be collected inside a
+  store app (Apple 3.2.2(iv); Google Play allows outside payments only for verified tax-exempt
+  organisations). If added: a link that opens a registered charity's own donation page in the browser.
+
+_Status:_ practice app ✅ · multi-deck, imports, deck-from-text = **next** · native apps = after validation.
 
 ## Principles
 - **Truthful, always** — résumés and prep reflect only what the candidate actually did; never inflate.
