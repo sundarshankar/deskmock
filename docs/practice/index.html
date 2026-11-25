@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>DeskMock Practice</title>
+<meta name="theme-color" content="#00a862">
+<meta name="apple-mobile-web-app-title" content="Practice">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: calm coach; nothing between you and the next question.
+   IDEA: an index-card deck that knows which cards you're about to forget.
+   PICTURE: the card itself, large, first on screen.
+   COLOUR and TYPE: white ground, ink, signal-green band for today's progress; Space Grotesk + Inter.
+   LAYOUT: one column; answer buttons in thumb reach at the bottom of the card. */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#07130d);--ink:light-dark(#0b0b10,#e9f5ee);--mute:light-dark(#5a5f6b,#9fb3a8);--card:light-dark(#ffffff,#0e1f16);--line:light-dark(#e3e6ea,#1f3328);--green:#00a862;--mist:light-dark(#eafaf2,#0f2a1c);--red:light-dark(#c2410c,#ff9b6b)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+.wrap{max-width:640px;margin:0 auto;padding:14px max(4vw,14px) 40px}
+h1{font:600 26px/1.1 "Space Grotesk",Inter,sans-serif;margin:6px 0 2px}
+.sub{color:var(--mute);font-size:14px;margin:0}
+.band{background:var(--green);color:#fff;border-radius:14px;padding:12px 16px;margin:14px 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center}
+.band b{display:block;font:600 26px/1.1 "Space Grotesk",sans-serif}
+.band span{font-size:13px;opacity:.9}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.chip{flex:none;min-height:40px;padding:0 14px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:500 14px Inter,sans-serif;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 20px;min-height:330px;display:flex;flex-direction:column;box-shadow:0 1px 0 var(--line),0 10px 30px -18px rgba(0,0,0,.35)}
+.top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin:0 0 8px}
+.cat{color:var(--green);font-weight:600}
+.tag{color:var(--mute)}
+.q{font:600 22px/1.25 "Space Grotesk",Inter,sans-serif;margin:0 0 14px;text-wrap:balance}
+.hint{color:var(--mute);font-size:14px;margin:0 0 12px}
+.a{border-top:1px solid var(--line);padding-top:14px;margin-top:auto;display:none}
+.a.show{display:block}.a p{margin:0 0 10px}
+.a .use{background:var(--mist);border-radius:10px;padding:10px 12px;font-size:15px}
+.btns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:16px}
+button.big{min-height:56px;border-radius:12px;border:0;font:600 15px/1.15 Inter,sans-serif;cursor:pointer;padding:6px 4px}
+button.big small{display:block;font-weight:500;font-size:12px;opacity:.8;margin-top:2px}
+.reveal{grid-column:1/-1;background:var(--ink);color:var(--bg)}
+.b1{background:light-dark(#fde8df,#3a1a0e);color:var(--red)}.b2{background:var(--mist);color:var(--ink)}
+.b3{background:var(--green);color:#fff}.b4{background:light-dark(#0b0b10,#e9f5ee);color:var(--bg)}
+button:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;color:var(--mute);font-size:14px;flex-wrap:wrap}
+.link{background:none;border:0;color:var(--mute);text-decoration:underline;font:inherit;cursor:pointer;min-height:44px;padding:0}
+.done{text-align:center;justify-content:center}
+.done h2{font:600 24px "Space Grotesk",sans-serif;margin:0 0 8px}
+.ghost{background:var(--mist);color:var(--ink);border:0;border-radius:12px;min-height:48px;padding:0 18px;font:600 15px Inter,sans-serif;cursor:pointer;margin-top:8px}
+.ver{font-size:12px;color:var(--mute);margin-top:10px}
+.deckbox{margin-top:20px;border-top:1px solid var(--line);padding-top:8px}
+.filebtn{display:inline-flex;align-items:center;justify-content:center}
+.ver a{color:var(--mute)}
+.msg{background:var(--mist);border-radius:10px;padding:10px 12px;font-size:14px;margin:10px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Interview practice</h1>
+<p class="sub">Say it out loud, then reveal. Cards you miss come back sooner.</p>
+<div class="band" aria-live="polite"><div><b id="due">0</b><span>due now</span></div><div><b id="new">0</b><span>new today</span></div><div><b id="lrn">0</b><span>learned</span></div></div>
+<div class="chips" id="chips" role="toolbar" aria-label="Rounds"></div>
+<div id="stage"></div>
+<div class="row"><span id="note"></span><button class="link" id="reset">Reset progress</button></div>
+<section class="deckbox"><p class="ver" id="deckinfo"></p>
+<label class="ghost filebtn">Load or update my deck<input type="file" id="file" accept=".json,application/json" hidden></label>
+<p class="ver">Your deck and progress stay on this device. Nothing is uploaded. Loading a newer deck file keeps your progress on cards with the same id.</p>
+<p class="ver"><a href="https://github.com/sundarshankar/deskmock">DeskMock</a> · open source · works offline once added to your Home Screen</p></section>
+</div>
+<script>
+{
+const DKEY="dm-deck-v1";
+let DATA=[],META={};
+function loadDeck(){try{const d=JSON.parse(localStorage.getItem(DKEY)||"null");if(d&&Array.isArray(d.cards)){DATA=d.cards;META=d.meta||{}}}catch(e){}}
+loadDeck();
+const NEW_PER_DAY=10, KEY="ivp-srs-v2", DAY=864e5, MIN=6e4;
+let S={cards:{},cat:"All",newDay:"",newCount:0};
+try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s&&s.cards)S=Object.assign(S,s)}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const today=()=>new Date().toDateString();
+if(S.newDay!==today()){S.newDay=today();S.newCount=0;save()}
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let CATS=[];const setCats=()=>{CATS=["All",...new Set(DATA.map(c=>c.round))];if(!CATS.includes(S.cat))S.cat="All"};setCats();
+const inCat=c=>S.cat==="All"||c.round===S.cat;
+const st=id=>S.cards[id];
+function counts(){const now=Date.now(),L=DATA.filter(inCat);
+ return{due:L.filter(c=>st(c.id)&&st(c.id).due<=now).length,
+        fresh:Math.max(0,Math.min(NEW_PER_DAY-S.newCount,L.filter(c=>!st(c.id)).length)),
+        learned:L.filter(c=>st(c.id)&&st(c.id).ivl>=1).length,total:L.length}}
+function next(){const now=Date.now(),L=DATA.filter(inCat);
+ const due=L.filter(c=>st(c.id)&&st(c.id).due<=now).sort((a,b)=>st(a.id).due-st(b.id).due);
+ if(due.length)return due[0];
+ if(S.newCount<NEW_PER_DAY){const n=L.find(c=>!st(c.id));if(n)return n}
+ const soon=L.filter(c=>st(c.id)&&st(c.id).due<=now+10*MIN).sort((a,b)=>st(a.id).due-st(b.id).due);
+ return soon[0]||null}
+// SM-2 style scheduling: 1 Again, 2 Hard, 3 Good, 4 Easy
+function sched(s,g){s=s?{...s}:{ef:2.5,ivl:0,reps:0,lapses:0,due:0};const now=Date.now();
+ if(g===1){s.reps=0;s.ivl=0;s.lapses++;s.ef=Math.max(1.3,s.ef-0.2);s.due=now+MIN;return s}
+ const q=g+2; // 3,4,5
+ s.ef=Math.max(1.3,s.ef+0.1-(5-q)*(0.08+(5-q)*0.02));
+ if(s.reps===0)s.ivl=g===2?0:g===3?1:3;
+ else if(s.reps===1)s.ivl=g===2?1:g===3?3:6;
+ else s.ivl=Math.max(1,Math.round(s.ivl*s.ef*(g===2?0.8:g===4?1.3:1)));
+ s.reps++;s.due=s.ivl?now+s.ivl*DAY:now+10*MIN;return s}
+const label=s=>!s.ivl?(s.due-Date.now()<=MIN*1.5?"1 min":"10 min"):s.ivl+(s.ivl===1?" day":" days");
+const chips=document.getElementById("chips"),stage=document.getElementById("stage");
+let cur=null;
+function drawChips(){chips.innerHTML=CATS.map(c=>`<button class="chip" aria-pressed="${c===S.cat}" data-c="${esc(c)}">${esc(c)}</button>`).join("")}
+function band(){const k=counts();document.getElementById("due").textContent=k.due;document.getElementById("new").textContent=k.fresh;document.getElementById("lrn").textContent=k.learned+" / "+k.total;document.getElementById("note").textContent=S.cat==="All"?"All rounds":S.cat}
+function nextDueText(){const L=DATA.filter(inCat).filter(c=>st(c.id)).map(c=>st(c.id).due);if(!L.length)return"";const t=Math.min(...L),h=Math.round((t-Date.now())/36e5);return h<1?"in under an hour":h<24?"in about "+h+" hours":"in "+Math.round(h/24)+" day(s)"}
+function show(){band();
+ if(!DATA.length){stage.innerHTML=`<div class="card done"><h2>No deck yet</h2><p class="hint">Load your deck file below, or try the sample deck first.</p><button class="ghost" id="sample">Use the sample deck</button></div>`;return}
+ cur=next();
+ if(!cur){stage.innerHTML=`<div class="card done"><h2>All caught up</h2><p class="hint">Nothing due in this set. Next card due ${esc(nextDueText()||"when you add new cards")}.</p><button class="ghost" id="extra">Practise a random card anyway</button></div>`;return}
+ const s=st(cur.id),tag=!s?"New":s.ivl>=1?"Review":"Learning";
+ stage.innerHTML=`<article class="card"><p class="top"><span class="cat">${esc(cur.round)}</span><span class="tag">${tag}</span></p><h2 class="q">${esc(cur.q)}</h2><p class="hint">Answer out loud, then reveal.</p>
+ <div class="a" id="ans"><p>${esc(cur.a)}</p>${cur.tip?`<div class="use">${esc(cur.tip)}</div>`:""}</div>
+ <div class="btns" id="btns"><button class="big reveal" id="rev">Reveal answer</button></div></article>`}
+function grade(g){const was=st(cur.id);if(!was){S.newCount++}S.cards[cur.id]=sched(was,g);save();show()}
+stage.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+ if(b.id==="rev"){document.getElementById("ans").classList.add("show");const s=st(cur.id);
+  const opts=[[1,"Again","b1"],[2,"Hard","b2"],[3,"Good","b3"],[4,"Easy","b4"]];
+  document.getElementById("btns").innerHTML=opts.map(([g,t,c])=>`<button class="big ${c}" data-g="${g}">${t}<small>${label(sched(s,g))}</small></button>`).join("");
+  stage.querySelector(".b3").focus()}
+ else if(b.dataset.g){grade(+b.dataset.g)}
+ else if(b.id==="extra"){const L=DATA.filter(inCat);cur=L[Math.floor(Math.random()*L.length)];
+  stage.innerHTML="";const s=st(cur.id);stage.innerHTML=`<article class="card"><p class="top"><span class="cat">${esc(cur.round)}</span><span class="tag">Extra</span></p><h2 class="q">${esc(cur.q)}</h2><p class="hint">Answer out loud, then reveal.</p><div class="a" id="ans"><p>${esc(cur.a)}</p>${cur.tip?`<div class="use">${esc(cur.tip)}</div>`:""}</div><div class="btns" id="btns"><button class="big reveal" id="rev">Reveal answer</button></div></article>`}});
+function normalize(j){const arr=Array.isArray(j)?j:(j&&Array.isArray(j.cards)?j.cards:null);if(!arr)throw new Error("Expected a list of cards");
+ const out=arr.map((c,i)=>({id:String(c.id??("card-"+i)),round:String(c.round||c.deck||"General"),q:String(c.q||c.question||""),a:String(c.a||c.answer||""),tip:String(c.tip||"")})).filter(c=>c.q&&c.a);
+ if(!out.length)throw new Error("No cards with a question and an answer");const ids=new Set();for(const c of out){if(ids.has(c.id))throw new Error("Duplicate card id: "+c.id);ids.add(c.id)}return out}
+function useDeck(cards,name){DATA=cards;META={name,loaded:new Date().toLocaleDateString()};try{localStorage.setItem(DKEY,JSON.stringify({cards,meta:META}))}catch(e){}
+ const keep=new Set(cards.map(c=>c.id));for(const k of Object.keys(S.cards))if(!keep.has(k))delete S.cards[k];save();setCats();drawChips();show();deckInfo()}
+function deckInfo(){document.getElementById("deckinfo").textContent=DATA.length?`Deck: ${META.name||"my deck"} · ${DATA.length} cards · loaded ${META.loaded||""}`:"No deck loaded."}
+function flash(m){const p=document.createElement("p");p.className="msg";p.textContent=m;document.querySelector(".deckbox").prepend(p);setTimeout(()=>p.remove(),5000)}
+document.getElementById("file").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
+ try{const cards=normalize(JSON.parse(await f.text()));const had=DATA.length;useDeck(cards,f.name.replace(/\.json$/i,""));flash(had?`Updated: ${cards.length} cards. Progress kept for matching cards.`:`Loaded ${cards.length} cards.`)}
+ catch(err){flash("Could not load that file: "+err.message)}e.target.value=""});
+stage.addEventListener("click",async e=>{if(e.target.id!=="sample")return;try{const j=await fetch("sample-deck.json").then(r=>r.json());useDeck(normalize(j),"Sample deck")}catch(err){flash("Sample deck unavailable offline.")}});
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
+chips.addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;S.cat=c.dataset.c;save();drawChips();show()});
+document.getElementById("reset").addEventListener("click",()=>{S.cards={};S.newCount=0;save();show()});
+drawChips();show();deckInfo();
+}
+</script>
+</body>
+</html>

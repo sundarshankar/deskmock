@@ -132,6 +132,17 @@ python3 jobhelm/mission-control.py     # opens http://localhost:8899 with a demo
 
 Full setup, configuration, and how to point it at your own [career-ops](https://github.com/santifer/career-ops) data are in **[jobhelm/README.md](jobhelm/README.md)**.
 
+## Practice on your phone
+
+[deskmock.com/practice](https://deskmock.com/practice/) is a small offline flashcard app for interview
+practice in spare minutes. Open it in Safari or Chrome on your phone and use **Add to Home Screen**.
+It uses spaced repetition (Again / Hard / Good / Easy), so the cards you miss come back sooner.
+
+Your cards never leave your device: tap **Load or update my deck** and pick a JSON file of cards
+(`[{"id","round","q","a","tip"}]`; see `docs/practice/sample-deck.json`). Loading a newer file keeps your
+progress on cards with the same `id`. JobHelm writes this file for you from your prep material; keep it
+out of git like the rest of your personal data.
+
 ## Requirements
 
 Python 3.9+ and an OpenAI-compatible API key (`deepseek-v3.2` is pennies per session; any provider works — see JobHelm's config for Gemini's free tier).
