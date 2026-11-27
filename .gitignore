@@ -13,3 +13,7 @@ __pycache__/
 **/jobhelm-discover-ack.txt
 **/jobhelm-ignored.tsv
 **/jobhelm-agencies.txt
+
+# Claude Code workspace stays local: open-source repo
+.claude/
+CLAUDE.md
